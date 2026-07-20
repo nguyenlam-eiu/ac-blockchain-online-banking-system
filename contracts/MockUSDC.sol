@@ -10,11 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract MockUSDC is ERC20 {
     uint8 private immutable _decimals;
 
-    constructor(
-        string memory name,
-        string memory symbol,
-        uint8 decimals_
-    ) ERC20(name, symbol) {
+    constructor(string memory name_, string memory symbol_, uint8 decimals_) ERC20(name_, symbol_) {
         _decimals = decimals_;
     }
 
@@ -22,7 +18,7 @@ contract MockUSDC is ERC20 {
      * @dev Overrides ERC20 decimals to return the custom decimals (6 for USDC).
      */
     function decimals() public view virtual override returns (uint8) {
-        return _decimals;
+        return 6;
     }
 
     /**
