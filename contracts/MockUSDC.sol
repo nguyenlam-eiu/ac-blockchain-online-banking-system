@@ -8,11 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  * @dev Simple ERC20 token with customizable decimals and public minting for testing.
  */
 contract MockUSDC is ERC20 {
-    uint8 private immutable _decimals;
-
-    constructor(string memory name_, string memory symbol_, uint8 decimals_) ERC20(name_, symbol_) {
-        _decimals = decimals_;
-    }
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
 
     /**
      * @dev Overrides ERC20 decimals to return the custom decimals (6 for USDC).
