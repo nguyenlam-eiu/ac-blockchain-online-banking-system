@@ -12,6 +12,9 @@ contract VaultManager is Ownable, Pausable {
     address public feeReceiver;
     address public savingCore;
 
+    // Solvency Guard (C2): Tracks total promised interest committed to active deposits
+    uint256 public totalPromisedInterest;
+
     event VaultFunded(address indexed sender, uint256 amount);
     event VaultWithdrawn(address indexed owner, uint256 amount);
     event FeeReceiverSet(address indexed newFeeReceiver);
@@ -54,12 +57,29 @@ contract VaultManager is Ownable, Pausable {
     }
 
     function withdrawVault(uint256 amount) external onlyOwner {
+        uint256 currentBalance = usdcToken.balanceOf(address(this));
+        require(currentBalance >= amount, "VaultManager: insufficient balance");
+        require(
+            currentBalance - amount >= totalPromisedInterest,
+            "VaultManager: cannot withdraw promised interest"
+        );
         usdcToken.safeTransfer(msg.sender, amount);
         emit VaultWithdrawn(msg.sender, amount);
     }
 
+    function allocateInterest(uint256 amount) external onlySavingCore {
+        totalPromisedInterest += amount;
+    }
+
+    function cancelInterest(uint256 amount) external onlySavingCore {
+        require(totalPromisedInterest >= amount, "VaultManager: underflow");
+        totalPromisedInterest -= amount;
+    }
+
     function payInterest(address receiver, uint256 amount) external onlySavingCore whenNotPaused {
         require(usdcToken.balanceOf(address(this)) >= amount, "VaultManager: insufficient vault balance");
+        require(totalPromisedInterest >= amount, "VaultManager: interest tracking error");
+        totalPromisedInterest -= amount;
         usdcToken.safeTransfer(receiver, amount);
     }
 }
