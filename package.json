@@ -9,6 +9,8 @@
     "node": "hardhat node",
     "size": "hardhat size-contracts",
     "clean": "hardhat clean",
+    "deploy:localhost": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "run:sepolia": "hardhat run --network sepolia",
     "run:ethereum": "hardhat run --network ethereum"
   },
