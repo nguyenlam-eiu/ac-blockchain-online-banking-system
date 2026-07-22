@@ -95,9 +95,9 @@ Below is the detailed plan for 7 working days (excluding Saturdays and Sundays) 
 
 **Goal:** Complete 100% Test Coverage and Deployment Script.
 
-- [ ] Write full test cases covering requirements.
-- [ ] Run test coverage, ensuring code coverage > 90%.
-- [ ] Write deployment script.
+- [x] Write full test cases covering requirements.
+- [x] Run test coverage, ensuring code coverage > 90%.
+- [x] Write deployment script.
 
 
 ## 📅 Day 7
