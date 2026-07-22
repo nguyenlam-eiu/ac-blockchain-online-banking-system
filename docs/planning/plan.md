@@ -46,18 +46,49 @@ Below is the detailed plan for 7 working days (excluding Saturdays and Sundays) 
 
 **Goal:** Complete Withdrawal logic in `SavingCore.sol`.
 
--  Implement `withdrawAtMaturity`: calculate interest (multiplying before dividing to prevent precision loss), transfer principal + interest to user, update status.
--  **Creative Challenge (C1) - Principal Safety:** Handle scenario where VaultManager runs out of funds (pay principal, record pending interest).
--  Implement `earlyWithdraw`: calculate penalty, return remaining principal to user, send penalty to fee receiver, and release allocated interest in VaultManager.
+- [x] Implement `withdrawAtMaturity`: use stored `expectedInterest`, return principal, request interest from VaultManager, and update status.
+- [x] **Creative Challenge (C1) - Principal Safety:** Handle scenario where VaultManager runs out of funds by paying principal and recording pending interest.
+- [x] Implement `earlyWithdraw`: calculate penalty, return remaining principal to user, send penalty to fee receiver, and release allocated interest in VaultManager.
 
 
 ## 📅 Day 5
 
-**Goal:** Renewals logic and Start Test Suite.
+**Goal:** Complete renewal logic and start the core contract test suite.
 
-- [ ] Implement `renewDeposit` (Manual): calculate new principal (old principal + interest), mint new NFT, mark old status.
-- [ ] Implement `autoRenewDeposit` (Bot): check Grace Period (3 days), reuse snapshotted APR.
-- [ ] Begin setting up `SavingSystem.test.ts` test file.
+- [x] Implement `renewDeposit(uint256 depositId)` for manual renewal:
+    - [x] Require system is not paused.
+    - [x] Require caller owns the deposit NFT.
+    - [x] Require deposit is `Active` and already matured.
+    - [x] Pay matured interest from VaultManager into `SavingCore`.
+    - [x] Create a new deposit using `principal + interest` as the renewed principal.
+    - [x] Preserve the original APR and penalty snapshots for the new deposit.
+    - [x] Mark the old deposit as `ManualRenewed`.
+    - [x] Mint a new ERC721 certificate for the renewed deposit.
+- [x] Implement `autoRenewDeposit(uint256 depositId)` for bot-triggered renewal:
+    - [x] Require system is not paused.
+    - [x] Require deposit is `Active` and already matured.
+    - [x] Require `block.timestamp <= maturityAt + GRACE_PERIOD`.
+    - [x] Reuse the original APR and penalty snapshots to protect users from plan rate decreases.
+    - [x] Mark the old deposit as `AutoRenewed`.
+    - [x] Mint a new ERC721 certificate to the current NFT owner.
+- [x] Add renewal event for manual and auto-renew flows.
+- [x] Confirm C2 bookkeeping remains correct:
+    - [x] Old promised interest is paid exactly once.
+    - [x] New promised interest is allocated for the renewed deposit.
+- [x] Start three separate contract test files instead of one combined suite:
+    - [x] `MockUSDC.test.ts` — token name/symbol, 6 decimals, public mint, ERC20 transfers.
+    - [x] `VaultManager.test.ts` — funding, admin withdrawal, pause/unpause, fee receiver, `onlySavingCore`, and C2 solvency guard.
+    - [x] `SavingCore.test.ts` — plans, deposits, withdrawals, early withdrawals, C1 pending interest, and renewals.
+- [x] Use per-file fixture setup for now:
+    - [x] Deploy `MockUSDC`, `VaultManager`, and `SavingCore`.
+    - [x] Link `VaultManager.setSavingCore`.
+    - [x] Create the default plan: 90 days, 225 bps APR, 400 bps penalty.
+    - [x] Mint/approve MockUSDC for test users and fund VaultManager.
+- [x] Add first `SavingCore.test.ts` cases for Day 5 scope:
+    - [x] APR and penalty snapshots survive `updatePlan`.
+    - [x] Manual renewal preserves original APR.
+    - [x] Auto-renew is blocked after the 3-day grace period.
+    - [x] Pause blocks renewal.
 
 
 ## 📅 Day 6
