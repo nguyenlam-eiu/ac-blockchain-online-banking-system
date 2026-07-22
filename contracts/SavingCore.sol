@@ -47,6 +47,9 @@ contract SavingCore is ERC721, Ownable {
 
     uint256 public constant GRACE_PERIOD = 3 days;
 
+    // C1 — Principal Safety: deferred interest when vault is insolvent
+    mapping(address => uint256) public pendingInterest;
+
     constructor(
         address _usdcToken,
         address _vaultManager
@@ -129,6 +132,36 @@ contract SavingCore is ERC721, Ownable {
         uint256 aprBpsAtOpen
     );
 
+    event DepositWithdrawn(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 principal,
+        uint256 interestPaid
+    );
+
+    event InterestDeferred(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 amount
+    );
+
+    event EarlyWithdrawn(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 userReceives,
+        uint256 penaltyAmount
+    );
+
+    event PendingInterestClaimed(address indexed user, uint256 amount);
+    event DepositRenewed(
+        uint256 indexed oldDepositId,
+        uint256 indexed newDepositId,
+        address indexed owner,
+        uint256 principal,
+        uint256 expectedInterest,
+        DepositStatus renewalType
+    );
+
     function openDeposit(uint256 planId, uint256 amount) external {
         require(!vaultManager.paused(), "SavingCore: system is paused");
         SavingPlan memory plan = plans[planId];
@@ -167,6 +200,126 @@ contract SavingCore is ERC721, Ownable {
         _mint(msg.sender, depositId);
 
         emit DepositOpened(depositId, msg.sender, planId, amount, maturityAt, plan.aprBps);
+
+        nextDepositId++;
+    }
+
+    // ALL WITHDRAWAL LOGICS.
+
+    function withdrawAtMaturity(uint256 depositId) external {
+        require(!vaultManager.paused(), "SavingCore: system is paused");
+        require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
+        DepositCertificate storage deposit = deposits[depositId];
+        require(deposit.status == DepositStatus.Active, "SavingCore: deposit not active");
+        require(block.timestamp >= deposit.maturityAt, "SavingCore: not yet matured");
+
+        deposit.status = DepositStatus.Withdrawn;
+        uint256 principal = deposit.principal;
+        uint256 interest = deposit.expectedInterest;
+
+        // Principal is always returned from SavingCore
+        usdcToken.safeTransfer(msg.sender, principal);
+
+        // C1 — Principal Safety: try to pay interest from VaultManager
+        uint256 interestPaid = 0;
+        try vaultManager.payInterest(msg.sender, interest) {
+            interestPaid = interest;
+        } catch {
+            // Vault insolvent — defer interest for later claim
+            pendingInterest[msg.sender] += interest;
+            emit InterestDeferred(depositId, msg.sender, interest);
+        }
+
+        emit DepositWithdrawn(depositId, msg.sender, principal, interestPaid);
+    }
+
+    function earlyWithdraw(uint256 depositId) external {
+        require(!vaultManager.paused(), "SavingCore: system is paused");
+        require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
+        DepositCertificate storage deposit = deposits[depositId];
+        require(deposit.status == DepositStatus.Active, "SavingCore: deposit not active");
+        require(block.timestamp < deposit.maturityAt, "SavingCore: already matured");
+
+        deposit.status = DepositStatus.Withdrawn;
+        uint256 principal = deposit.principal;
+        uint256 penaltyAmount = (principal * deposit.earlyWithdrawPenaltyBpsAtOpen) / 10000;
+        uint256 userReceives = principal - penaltyAmount;
+
+        // Return remaining principal to user
+        usdcToken.safeTransfer(msg.sender, userReceives);
+
+        // Send penalty to feeReceiver
+        if (penaltyAmount > 0) {
+            usdcToken.safeTransfer(vaultManager.feeReceiver(), penaltyAmount);
+        }
+
+        // Release allocated interest from VaultManager (C2 bookkeeping)
+        vaultManager.cancelInterest(deposit.expectedInterest);
+
+        emit EarlyWithdrawn(depositId, msg.sender, userReceives, penaltyAmount);
+    }
+
+    function renewDeposit(uint256 depositId) external {
+        require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
+        _renewDeposit(depositId, msg.sender, DepositStatus.ManualRenewed, false);
+    }
+
+    function autoRenewDeposit(uint256 depositId) external {
+        address depositOwner = ownerOf(depositId);
+        _renewDeposit(depositId, depositOwner, DepositStatus.AutoRenewed, true);
+    }
+
+    function claimPendingInterest() external {
+        require(!vaultManager.paused(), "SavingCore: system is paused");
+        uint256 amount = pendingInterest[msg.sender];
+        require(amount > 0, "SavingCore: no pending interest");
+
+        pendingInterest[msg.sender] = 0;
+        vaultManager.payInterest(msg.sender, amount);
+
+        emit PendingInterestClaimed(msg.sender, amount);
+    }
+
+    function _renewDeposit(
+        uint256 depositId,
+        address depositOwner,
+        DepositStatus renewalType,
+        bool enforceGracePeriod
+    ) internal {
+        require(!vaultManager.paused(), "SavingCore: system is paused");
+        DepositCertificate storage oldDeposit = deposits[depositId];
+        require(oldDeposit.status == DepositStatus.Active, "SavingCore: deposit not active");
+        require(block.timestamp >= oldDeposit.maturityAt, "SavingCore: not yet matured");
+        if (enforceGracePeriod) {
+            require(block.timestamp <= oldDeposit.maturityAt + GRACE_PERIOD, "SavingCore: grace period expired");
+        }
+
+        uint256 interest = oldDeposit.expectedInterest;
+        uint256 newPrincipal = oldDeposit.principal + interest;
+        uint256 tenorSeconds = oldDeposit.maturityAt - oldDeposit.startAt;
+        uint256 newExpectedInterest = (newPrincipal * oldDeposit.aprBpsAtOpen * tenorSeconds) / (365 * 86400 * 10000);
+        uint256 newDepositId = nextDepositId;
+
+        oldDeposit.status = renewalType;
+
+        vaultManager.payInterest(address(this), interest);
+
+        deposits[newDepositId] = DepositCertificate({
+            planId: oldDeposit.planId,
+            principal: newPrincipal,
+            startAt: block.timestamp,
+            maturityAt: block.timestamp + tenorSeconds,
+            aprBpsAtOpen: oldDeposit.aprBpsAtOpen,
+            earlyWithdrawPenaltyBpsAtOpen: oldDeposit.earlyWithdrawPenaltyBpsAtOpen,
+            expectedInterest: newExpectedInterest,
+            status: DepositStatus.Active
+        });
+
+        vaultManager.allocateInterest(newExpectedInterest);
+
+        _mint(depositOwner, newDepositId);
+
+        emit DepositRenewed(depositId, newDepositId, depositOwner, newPrincipal, newExpectedInterest, renewalType);
 
         nextDepositId++;
     }
