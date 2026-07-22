@@ -22,13 +22,19 @@ Use this skill when deploying the smart contract ecosystem to a local Hardhat no
 
 ### Local Node Deployment
 ```bash
+npm run deploy:localhost
+# or
 npx hardhat run scripts/deploy.ts --network localhost
 ```
 
 ### Sepolia Testnet Deployment
 ```bash
+npm run deploy:sepolia
+# or
 npx hardhat run scripts/deploy.ts --network sepolia
 ```
+
+> **Note**: `scripts/deploy.ts` automatically wires `vaultManager.setSavingCore`, creates default Plan #1 (Student ID `2231200021`), and funds `VaultManager` with 100,000 USDC interest liquidity on local networks.
 
 ## Verification Checklist
 - [ ] Confirm `savingCore` state variable is set inside `VaultManager`.
