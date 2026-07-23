@@ -222,14 +222,14 @@ When the system is paused:
 
 **Goal**: Confirm the React frontend builds and runs.
 
-- [ ] Initialize or validate Vite React TypeScript setup
-- [ ] Install `ethers`
-- [ ] Install `react-router-dom`
-- [ ] Install and configure Tailwind CSS
-- [ ] Install `lucide-react`
-- [ ] Remove default Vite demo content
-- [ ] Preserve the existing `frontend/src/` folders
-- [ ] Create a minimal Online Banking System landing page
+- [x] Initialize or validate Vite React TypeScript setup
+- [x] Install `ethers`
+- [x] Install `react-router-dom`
+- [x] Install and configure Tailwind CSS
+- [x] Install `lucide-react`
+- [x] Remove default Vite demo content
+- [x] Preserve the existing `frontend/src/` folders
+- [x] Create a minimal Online Banking System landing page
 
 ### Verification
 
@@ -241,10 +241,10 @@ npm run dev
 
 Success criteria:
 
-- [ ] `npm run build` succeeds
-- [ ] development server starts
-- [ ] browser displays the Online Banking System page
-- [ ] no backend files are modified
+- [x] `npm run build` succeeds
+- [x] development server starts
+- [x] browser displays the Online Banking System page
+- [x] no backend files are modified
 
 ---
 
@@ -254,26 +254,26 @@ Success criteria:
 
 ### `addresses.ts`
 
-- [ ] Store `MockUSDC` address
-- [ ] Store `VaultManager` address
-- [ ] Store `SavingCore` address
-- [ ] Store expected local network chain ID
+- [x] Store `MockUSDC` address
+- [x] Store `VaultManager` address
+- [x] Store `SavingCore` address
+- [x] Store expected local network chain ID
 
 ### `contracts.ts`
 
-- [ ] Import contract ABIs
-- [ ] Create read-only provider helpers
-- [ ] Create signer-based contract helpers
-- [ ] Keep contract creation outside React components
+- [x] Import contract ABIs
+- [x] Create read-only provider helpers
+- [x] Create signer-based contract helpers
+- [x] Keep contract creation outside React components
 
 ### `format.ts`
 
-- [ ] Add `USDC_DECIMALS = 6`
-- [ ] Add `formatUSDC(value: bigint)`
-- [ ] Add `parseUSDC(value: string)`
-- [ ] Add `formatAddress(address: string)`
-- [ ] Add readable timestamp formatter
-- [ ] Add BPS-to-percentage formatter
+- [x] Add `USDC_DECIMALS = 6`
+- [x] Add `formatUSDC(value: bigint)`
+- [x] Add `parseUSDC(value: string)`
+- [x] Add `formatAddress(address: string)`
+- [x] Add readable timestamp formatter
+- [x] Add BPS-to-percentage formatter
 
 ### Verification
 

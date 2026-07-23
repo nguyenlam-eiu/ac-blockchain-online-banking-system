@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { getTxExplorerUrl } from '../blockchain/addresses';
 import {
   formatUSDC,
   parseUSDC,
@@ -173,9 +174,9 @@ export const OpenDepositForm = ({
               Deposit opened successfully.
             </p>
 
-            {transactionHash && (
+            {transactionHash && getTxExplorerUrl(transactionHash) && (
               <a
-                href={`https://sepolia.etherscan.io/tx/${transactionHash}`}
+                href={getTxExplorerUrl(transactionHash)!}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-1 inline-flex text-xs font-medium text-emerald-700 underline"

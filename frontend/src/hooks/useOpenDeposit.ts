@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { CONTRACT_ADDRESSES } from '../blockchain/addresses';
+import { CONTRACT_ADDRESSES, SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
 import { getContract } from '../blockchain/contracts';
 import { useWalletContext } from '../context/WalletContext';
 import { getErrorMessage } from '../utils/getErrorMessage';
@@ -47,7 +47,7 @@ export const useOpenDeposit = () => {
       if (isWrongNetwork) {
         setState({
           ...INITIAL_STATE,
-          error: 'Switch MetaMask to Sepolia first.',
+          error: `Switch MetaMask to ${SUPPORTED_NETWORK_NAME} first.`,
         });
 
         return false;

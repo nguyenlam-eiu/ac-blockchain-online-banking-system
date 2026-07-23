@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
 import { DepositCard } from '../components/DepositCard';
 import { LoadingCard } from '../components/LoadingCard';
 import { PageHeader } from '../components/PageHeader';
@@ -89,7 +90,7 @@ export const DepositsPage = () => {
             variant="error"
             icon={AlertTriangle}
             title="Unsupported network"
-            description="Switch MetaMask to Sepolia before loading deposits."
+            description={`Switch MetaMask to ${SUPPORTED_NETWORK_NAME} before loading deposits.`}
           />
         )}
 

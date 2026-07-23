@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { getTxExplorerUrl } from '../blockchain/addresses';
 import {
   formatBps,
   formatTimestamp,
@@ -237,14 +238,14 @@ export const DepositCard = ({
         </div>
       )}
 
-      {transactionHash && !error && (
+      {transactionHash && !error && getTxExplorerUrl(transactionHash) && (
         <a
-          href={`https://sepolia.etherscan.io/tx/${transactionHash}`}
+          href={getTxExplorerUrl(transactionHash)!}
           target="_blank"
           rel="noreferrer"
           className="mt-4 inline-flex text-sm font-medium text-blue-700 underline"
         >
-          View latest transaction on Etherscan
+          View transaction on Etherscan
         </a>
       )}
 

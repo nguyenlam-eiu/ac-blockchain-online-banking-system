@@ -4,6 +4,7 @@ import {
   ReceiptText,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
 
 const NAVIGATION_ITEMS = [
   {
@@ -36,7 +37,7 @@ export const Sidebar = () => {
         </h1>
 
         <p className="mt-1 text-sm text-slate-500">
-          Sepolia Testnet
+          {SUPPORTED_NETWORK_NAME}
         </p>
       </div>
 

@@ -1,3 +1,5 @@
+import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
+
 type ErrorWithDetails = {
   code?: string | number;
   shortMessage?: string;
@@ -80,7 +82,7 @@ export const getErrorMessage = (
       'network changed',
     ])
   ) {
-    return 'Switch MetaMask to the Sepolia network.';
+    return `Switch MetaMask to the ${SUPPORTED_NETWORK_NAME} network.`;
   }
 
   if (
@@ -115,7 +117,7 @@ export const getErrorMessage = (
       'timeout',
     ])
   ) {
-    return 'Unable to communicate with Sepolia. Try again.';
+    return `Unable to communicate with ${SUPPORTED_NETWORK_NAME}. Try again.`;
   }
 
   if (

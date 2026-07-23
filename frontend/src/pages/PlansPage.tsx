@@ -4,6 +4,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 
+import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
 import { LoadingCard } from '../components/LoadingCard';
 import { PageHeader } from '../components/PageHeader';
 import { PlanCard } from '../components/PlanCard';
@@ -68,7 +69,7 @@ export const PlansPage = () => {
           variant="warning"
           icon={AlertTriangle}
           title="MetaMask is not available"
-          description="Install MetaMask to connect with the Sepolia network."
+          description={`Install MetaMask to connect with the ${SUPPORTED_NETWORK_NAME} network.`}
         />
       )}
 
@@ -87,7 +88,7 @@ export const PlansPage = () => {
             variant="error"
             icon={AlertTriangle}
             title="Unsupported network"
-            description="Switch MetaMask to Sepolia before loading savings plans."
+            description={`Switch MetaMask to ${SUPPORTED_NETWORK_NAME} before loading savings plans.`}
           />
         )}
 

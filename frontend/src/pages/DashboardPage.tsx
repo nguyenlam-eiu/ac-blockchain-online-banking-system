@@ -1,6 +1,7 @@
 import { CircleDollarSign, Landmark, PiggyBank, RefreshCw, WalletCards } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { SUPPORTED_NETWORK_NAME } from "../blockchain/addresses";
 import { formatAddress } from "../blockchain/format";
 import { PageHeader } from "../components/PageHeader";
 import { StatCard } from "../components/StatCard";
@@ -71,14 +72,14 @@ export const DashboardPage = () => {
 
       {isConnected && isWrongNetwork && (
         <section className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="text-sm font-medium text-red-700">Switch MetaMask to Sepolia before loading account data.</p>
+          <p className="text-sm font-medium text-red-700">Switch MetaMask to {SUPPORTED_NETWORK_NAME} before loading account data.</p>
         </section>
       )}
 
       {canReadBlockchain && (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
           <p className="text-sm font-medium text-emerald-800">
-            Wallet {formatAddress(account)} is connected to Sepolia.
+            Wallet {formatAddress(account)} is connected to {SUPPORTED_NETWORK_NAME}.
           </p>
         </section>
       )}
@@ -86,7 +87,7 @@ export const DashboardPage = () => {
       {canReadBlockchain && balanceError && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
           <p className="text-sm font-medium text-amber-800">
-            MockUSDC data is unavailable because the Sepolia contract address has not been configured yet.
+            MockUSDC data is unavailable because the contract address has not been configured yet.
           </p>
         </section>
       )}
@@ -120,7 +121,7 @@ export const DashboardPage = () => {
           value={!canReadBlockchain ? "—" : isBalanceLoading ? "Loading..." : `${formattedBalance} USDC`}
           helperText={
             !canReadBlockchain
-              ? "Connect MetaMask on Sepolia."
+              ? `Connect MetaMask on ${SUPPORTED_NETWORK_NAME}.`
               : balanceError
               ? "MockUSDC contract is not configured yet."
               : "Available balance in your connected wallet."
