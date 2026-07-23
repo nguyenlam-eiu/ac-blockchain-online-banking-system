@@ -17,7 +17,6 @@ export const CONTRACT_ABIS = {
     'function transfer(address to, uint256 amount) returns (bool)',
     'function mint(address to, uint256 amount)',
   ],
-
   vaultManager: [
     'function owner() view returns (address)',
     'function paused() view returns (bool)',
@@ -32,7 +31,6 @@ export const CONTRACT_ABIS = {
     'function pause()',
     'function unpause()',
   ],
-
   savingCore: [
     'function owner() view returns (address)',
     'function usdcToken() view returns (address)',
@@ -41,18 +39,14 @@ export const CONTRACT_ABIS = {
     'function nextDepositId() view returns (uint256)',
     'function GRACE_PERIOD() view returns (uint256)',
     'function pendingInterest(address account) view returns (uint256)',
-
     'function plans(uint256 planId) view returns (uint256 tenorDays, uint256 aprBps, uint256 minDeposit, uint256 maxDeposit, uint256 earlyWithdrawPenaltyBps, bool enabled)',
-
     'function deposits(uint256 depositId) view returns (uint256 planId, uint256 principal, uint256 startAt, uint256 maturityAt, uint256 aprBpsAtOpen, uint256 earlyWithdrawPenaltyBpsAtOpen, uint256 expectedInterest, uint8 status)',
-
     'function ownerOf(uint256 tokenId) view returns (address)',
-
+    'function safeTransferFrom(address from, address to, uint256 tokenId)',
     'function createPlan(uint256 tenorDays, uint256 aprBps, uint256 minDeposit, uint256 maxDeposit, uint256 earlyWithdrawPenaltyBps)',
     'function updatePlan(uint256 planId, uint256 newAprBps)',
     'function enablePlan(uint256 planId)',
     'function disablePlan(uint256 planId)',
-
     'function openDeposit(uint256 planId, uint256 amount)',
     'function withdrawAtMaturity(uint256 depositId)',
     'function earlyWithdraw(uint256 depositId)',

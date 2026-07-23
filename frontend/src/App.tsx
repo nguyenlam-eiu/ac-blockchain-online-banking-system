@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DepositsPage } from "./pages/DepositsPage";
 import { PlansPage } from "./pages/PlansPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { DepositDetailPage } from "./pages/DepositDetailPage";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
             <Route path="plans" element={<PlansPage />} />
             <Route path="deposits" element={<DepositsPage />} />
             <Route path="*" element={<NotFoundPage />} />
+            <Route path="/deposits/:depositId" element={<DepositDetailPage />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

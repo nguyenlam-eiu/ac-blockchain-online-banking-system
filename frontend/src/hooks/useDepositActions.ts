@@ -1,6 +1,11 @@
-import { useCallback, useState } from 'react';
+import {
+  useCallback,
+  useState,
+} from 'react';
 
-import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
+import {
+  SUPPORTED_NETWORK_NAME,
+} from '../blockchain/addresses';
 import { getContract } from '../blockchain/contracts';
 import { useWalletContext } from '../context/WalletContext';
 import { getErrorMessage } from '../utils/getErrorMessage';
@@ -8,7 +13,8 @@ import { getErrorMessage } from '../utils/getErrorMessage';
 export type DepositAction =
   | 'earlyWithdraw'
   | 'withdrawAtMaturity'
-  | 'renewDeposit';
+  | 'renewDeposit'
+  | 'autoRenewDeposit';
 
 type DepositActionsState = {
   activeDepositId: bigint | null;
@@ -32,7 +38,9 @@ export const useDepositActions = () => {
   } = useWalletContext();
 
   const [state, setState] =
-    useState<DepositActionsState>(INITIAL_STATE);
+    useState<DepositActionsState>(
+      INITIAL_STATE,
+    );
 
   const executeAction = useCallback(
     async (
@@ -54,6 +62,13 @@ export const useDepositActions = () => {
           error: `Switch MetaMask to ${SUPPORTED_NETWORK_NAME} first.`,
         });
 
+        return false;
+      }
+
+      if (
+        state.activeDepositId !== null &&
+        state.activeAction !== null
+      ) {
         return false;
       }
 
@@ -79,9 +94,13 @@ export const useDepositActions = () => {
               ? await savingCore.withdrawAtMaturity(
                   depositId,
                 )
-              : await savingCore.renewDeposit(
-                  depositId,
-                );
+              : action === 'renewDeposit'
+                ? await savingCore.renewDeposit(
+                    depositId,
+                  )
+                : await savingCore.autoRenewDeposit(
+                    depositId,
+                  );
 
         setState((current) => ({
           ...current,
@@ -116,6 +135,8 @@ export const useDepositActions = () => {
       signer,
       isConnected,
       isWrongNetwork,
+      state.activeDepositId,
+      state.activeAction,
     ],
   );
 
@@ -126,17 +147,16 @@ export const useDepositActions = () => {
 
   return {
     ...state,
-
     isSubmitting:
       state.activeDepositId !== null &&
       state.activeAction !== null,
-
-    earlyWithdraw: (depositId: bigint) =>
+    earlyWithdraw: (
+      depositId: bigint,
+    ) =>
       executeAction(
         depositId,
         'earlyWithdraw',
       ),
-
     withdrawAtMaturity: (
       depositId: bigint,
     ) =>
@@ -144,13 +164,20 @@ export const useDepositActions = () => {
         depositId,
         'withdrawAtMaturity',
       ),
-
-    renewDeposit: (depositId: bigint) =>
+    renewDeposit: (
+      depositId: bigint,
+    ) =>
       executeAction(
         depositId,
         'renewDeposit',
       ),
-
+    autoRenewDeposit: (
+      depositId: bigint,
+    ) =>
+      executeAction(
+        depositId,
+        'autoRenewDeposit',
+      ),
     clearDepositActionState,
   };
 };
