@@ -1,7 +1,15 @@
-import { RefreshCw } from 'lucide-react';
+import {
+  AlertTriangle,
+  Landmark,
+  RefreshCw,
+  WalletCards,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { DepositCard } from '../components/DepositCard';
+import { LoadingCard } from '../components/LoadingCard';
 import { PageHeader } from '../components/PageHeader';
+import { StateMessage } from '../components/StateMessage';
 import { useWalletContext } from '../context/WalletContext';
 import { useDeposits } from '../hooks/useDeposits';
 
@@ -32,61 +40,86 @@ export const DepositsPage = () => {
         action={
           <button
             type="button"
-            disabled={!canReadBlockchain || isLoading}
-            onClick={() => void reloadDeposits()}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              !canReadBlockchain ||
+              isLoading
+            }
+            onClick={() =>
+              void reloadDeposits()
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               className={[
                 'h-4 w-4',
-                isLoading ? 'animate-spin' : '',
+                isLoading
+                  ? 'animate-spin'
+                  : '',
               ].join(' ')}
             />
 
-            {isLoading ? 'Loading...' : 'Refresh'}
+            {isLoading
+              ? 'Loading...'
+              : 'Refresh'}
           </button>
         }
       />
 
       {!isMetaMaskAvailable && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-          <p className="text-sm font-medium text-amber-800">
-            Install MetaMask to view your deposits.
-          </p>
-        </section>
+        <StateMessage
+          variant="warning"
+          icon={AlertTriangle}
+          title="MetaMask is not available"
+          description="Install MetaMask to access your blockchain deposits."
+        />
       )}
 
-      {isConnected && isWrongNetwork && (
-        <section className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="text-sm font-medium text-red-700">
-            Switch MetaMask to Sepolia before loading deposits.
-          </p>
-        </section>
-      )}
+      {isMetaMaskAvailable &&
+        !isConnected && (
+          <StateMessage
+            icon={WalletCards}
+            title="Wallet not connected"
+            description="Connect MetaMask to view deposits owned by your wallet."
+          />
+        )}
 
-      {!canReadBlockchain && (
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Connect MetaMask on Sepolia to view your deposits.
-          </p>
-        </section>
-      )}
+      {isConnected &&
+        isWrongNetwork && (
+          <StateMessage
+            variant="error"
+            icon={AlertTriangle}
+            title="Unsupported network"
+            description="Switch MetaMask to Sepolia before loading deposits."
+          />
+        )}
 
-      {canReadBlockchain && error && (
-        <section className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="text-sm font-medium text-red-700">
-            Unable to load deposits from SavingCore.
-          </p>
-        </section>
-      )}
+      {canReadBlockchain &&
+        error && (
+          <StateMessage
+            variant="error"
+            icon={AlertTriangle}
+            title="Unable to load deposits"
+            description={error}
+            action={
+              <button
+                type="button"
+                onClick={() =>
+                  void reloadDeposits()
+                }
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+              >
+                Try Again
+              </button>
+            }
+          />
+        )}
 
       {canReadBlockchain &&
         isLoading &&
         deposits.length === 0 && (
-          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Loading your deposits...
-            </p>
+          <section className="space-y-5">
+            <LoadingCard />
+            <LoadingCard />
           </section>
         )}
 
@@ -94,30 +127,37 @@ export const DepositsPage = () => {
         !isLoading &&
         !error &&
         deposits.length === 0 && (
-          <section className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">
-              No deposits yet
-            </h2>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Open a saving plan to create your first term deposit.
-            </p>
-          </section>
+          <StateMessage
+            icon={Landmark}
+            title="No deposits yet"
+            description="Choose a savings plan to create your first term deposit."
+            action={
+              <Link
+                to="/plans"
+                className="inline-flex rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Browse Savings Plans
+              </Link>
+            }
+          />
         )}
 
-      {canReadBlockchain && deposits.length > 0 && (
-        <section className="space-y-5">
-          {deposits.map((deposit) => (
-            <DepositCard
-              key={deposit.id.toString()}
-              deposit={deposit}
-              onActionCompleted={() => {
-                void reloadDeposits();
-              }}
-            />
-          ))}
-        </section>
-      )}
+      {canReadBlockchain &&
+        deposits.length > 0 && (
+          <section className="space-y-5">
+            {deposits.map(
+              (deposit) => (
+                <DepositCard
+                  key={deposit.id.toString()}
+                  deposit={deposit}
+                  onActionCompleted={() => {
+                    void reloadDeposits();
+                  }}
+                />
+              ),
+            )}
+          </section>
+        )}
     </div>
   );
 };

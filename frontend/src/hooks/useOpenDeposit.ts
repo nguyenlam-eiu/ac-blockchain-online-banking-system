@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { CONTRACT_ADDRESSES } from '../blockchain/addresses';
 import { getContract } from '../blockchain/contracts';
 import { useWalletContext } from '../context/WalletContext';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 type OpenDepositState = {
   isApproving: boolean;
@@ -21,6 +22,7 @@ const INITIAL_STATE: OpenDepositState = {
 export const useOpenDeposit = () => {
   const {
     signer,
+    account,
     isConnected,
     isWrongNetwork,
   } = useWalletContext();
@@ -33,11 +35,20 @@ export const useOpenDeposit = () => {
       planId: bigint,
       amount: bigint,
     ): Promise<boolean> => {
-      if (!signer || !isConnected || isWrongNetwork) {
-        setState((current) => ({
-          ...current,
-          error: 'Connect MetaMask on Sepolia first.',
-        }));
+      if (!signer || !account || !isConnected) {
+        setState({
+          ...INITIAL_STATE,
+          error: 'Connect MetaMask first.',
+        });
+
+        return false;
+      }
+
+      if (isWrongNetwork) {
+        setState({
+          ...INITIAL_STATE,
+          error: 'Switch MetaMask to Sepolia first.',
+        });
 
         return false;
       }
@@ -50,15 +61,44 @@ export const useOpenDeposit = () => {
       });
 
       try {
-        const mockUsdc = getContract('mockUsdc', signer);
-        const savingCore = getContract('savingCore', signer);
-
-        const approveTransaction = await mockUsdc.approve(
-          CONTRACT_ADDRESSES.savingCore,
-          amount,
+        const mockUsdc = getContract(
+          'mockUsdc',
+          signer,
         );
 
-        await approveTransaction.wait();
+        const savingCore = getContract(
+          'savingCore',
+          signer,
+        );
+
+        const balance =
+          await mockUsdc.balanceOf(account) as bigint;
+
+        if (balance < amount) {
+          setState({
+            ...INITIAL_STATE,
+            error:
+              'Your MockUSDC balance is lower than the deposit amount.',
+          });
+
+          return false;
+        }
+
+        const allowance =
+          await mockUsdc.allowance(
+            account,
+            CONTRACT_ADDRESSES.savingCore,
+          ) as bigint;
+
+        if (allowance < amount) {
+          const approvalTransaction =
+            await mockUsdc.approve(
+              CONTRACT_ADDRESSES.savingCore,
+              amount,
+            );
+
+          await approvalTransaction.wait();
+        }
 
         setState({
           isApproving: false,
@@ -68,11 +108,15 @@ export const useOpenDeposit = () => {
         });
 
         const depositTransaction =
-          await savingCore.openDeposit(planId, amount);
+          await savingCore.openDeposit(
+            planId,
+            amount,
+          );
 
         setState((current) => ({
           ...current,
-          transactionHash: depositTransaction.hash,
+          transactionHash:
+            depositTransaction.hash,
         }));
 
         await depositTransaction.wait();
@@ -81,30 +125,18 @@ export const useOpenDeposit = () => {
           isApproving: false,
           isOpeningDeposit: false,
           error: '',
-          transactionHash: depositTransaction.hash,
+          transactionHash:
+            depositTransaction.hash,
         });
 
         return true;
       } catch (error) {
-        const isUserRejected =
-          error instanceof Error &&
-          (
-            error.message.includes('ACTION_REJECTED') ||
-            error.message.includes('user rejected') ||
-            error.message.includes('4001')
-          );
-
-        const message = isUserRejected
-          ? 'Transaction was rejected.'
-          : error instanceof Error
-            ? error.message
-            : 'Failed to open deposit.';
-
         setState({
-          isApproving: false,
-          isOpeningDeposit: false,
-          error: message,
-          transactionHash: '',
+          ...INITIAL_STATE,
+          error: getErrorMessage(
+            error,
+            'Failed to open deposit.',
+          ),
         });
 
         return false;
@@ -112,14 +144,16 @@ export const useOpenDeposit = () => {
     },
     [
       signer,
+      account,
       isConnected,
       isWrongNetwork,
     ],
   );
 
-  const clearOpenDepositState = useCallback(() => {
-    setState(INITIAL_STATE);
-  }, []);
+  const clearOpenDepositState =
+    useCallback(() => {
+      setState(INITIAL_STATE);
+    }, []);
 
   return {
     ...state,

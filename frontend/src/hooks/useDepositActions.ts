@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { getContract } from '../blockchain/contracts';
 import { useWalletContext } from '../context/WalletContext';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 export type DepositAction =
   | 'earlyWithdraw'
@@ -37,12 +38,19 @@ export const useDepositActions = () => {
       depositId: bigint,
       action: DepositAction,
     ): Promise<boolean> => {
-      if (!signer || !isConnected || isWrongNetwork) {
+      if (!signer || !isConnected) {
         setState({
-          activeDepositId: null,
-          activeAction: null,
-          transactionHash: '',
-          error: 'Connect MetaMask on Sepolia first.',
+          ...INITIAL_STATE,
+          error: 'Connect MetaMask first.',
+        });
+
+        return false;
+      }
+
+      if (isWrongNetwork) {
+        setState({
+          ...INITIAL_STATE,
+          error: 'Switch MetaMask to Sepolia first.',
         });
 
         return false;
@@ -63,16 +71,21 @@ export const useDepositActions = () => {
 
         const transaction =
           action === 'earlyWithdraw'
-            ? await savingCore.earlyWithdraw(depositId)
+            ? await savingCore.earlyWithdraw(
+                depositId,
+              )
             : action === 'withdrawAtMaturity'
               ? await savingCore.withdrawAtMaturity(
                   depositId,
                 )
-              : await savingCore.renewDeposit(depositId);
+              : await savingCore.renewDeposit(
+                  depositId,
+                );
 
         setState((current) => ({
           ...current,
-          transactionHash: transaction.hash,
+          transactionHash:
+            transaction.hash,
         }));
 
         await transaction.wait();
@@ -80,31 +93,19 @@ export const useDepositActions = () => {
         setState({
           activeDepositId: null,
           activeAction: null,
-          transactionHash: transaction.hash,
+          transactionHash:
+            transaction.hash,
           error: '',
         });
 
         return true;
       } catch (error) {
-        const isUserRejected =
-          error instanceof Error &&
-          (
-            error.message.includes('ACTION_REJECTED') ||
-            error.message.includes('user rejected') ||
-            error.message.includes('4001')
-          );
-
-        const message = isUserRejected
-          ? 'Transaction was rejected.'
-          : error instanceof Error
-            ? error.message
-            : 'Deposit transaction failed.';
-
         setState({
-          activeDepositId: null,
-          activeAction: null,
-          transactionHash: '',
-          error: message,
+          ...INITIAL_STATE,
+          error: getErrorMessage(
+            error,
+            'Deposit transaction failed.',
+          ),
         });
 
         return false;
@@ -117,9 +118,10 @@ export const useDepositActions = () => {
     ],
   );
 
-  const clearDepositActionState = useCallback(() => {
-    setState(INITIAL_STATE);
-  }, []);
+  const clearDepositActionState =
+    useCallback(() => {
+      setState(INITIAL_STATE);
+    }, []);
 
   return {
     ...state,
@@ -129,16 +131,24 @@ export const useDepositActions = () => {
       state.activeAction !== null,
 
     earlyWithdraw: (depositId: bigint) =>
-      executeAction(depositId, 'earlyWithdraw'),
+      executeAction(
+        depositId,
+        'earlyWithdraw',
+      ),
 
-    withdrawAtMaturity: (depositId: bigint) =>
+    withdrawAtMaturity: (
+      depositId: bigint,
+    ) =>
       executeAction(
         depositId,
         'withdrawAtMaturity',
       ),
 
     renewDeposit: (depositId: bigint) =>
-      executeAction(depositId, 'renewDeposit'),
+      executeAction(
+        depositId,
+        'renewDeposit',
+      ),
 
     clearDepositActionState,
   };
