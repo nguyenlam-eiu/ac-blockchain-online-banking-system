@@ -1,6 +1,6 @@
-export const LOCAL_CHAIN_ID = 31337n;
+export const SUPPORTED_CHAIN_ID = 11155111n;
 
-export const LOCAL_NETWORK_NAME = 'Hardhat Localhost';
+export const SUPPORTED_NETWORK_NAME = 'Sepolia';
 
 export const CONTRACT_ADDRESSES = {
   mockUsdc: '',
