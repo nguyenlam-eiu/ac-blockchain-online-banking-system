@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2, Wallet } from 'lucide-react';
 
 import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
 import { formatAddress } from '../blockchain/format';
-import { useWallet } from '../hooks/useWallet';
+import { useWalletContext } from '../context/WalletContext';
 
 export const WalletButton = () => {
   const {
@@ -13,7 +13,7 @@ export const WalletButton = () => {
     isMetaMaskAvailable,
     isWrongNetwork,
     connectWallet,
-  } = useWallet();
+  } = useWalletContext();
 
   if (!isMetaMaskAvailable) {
     return (
