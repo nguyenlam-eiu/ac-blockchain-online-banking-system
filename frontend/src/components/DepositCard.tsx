@@ -24,6 +24,7 @@ import {
 
 type DepositCardProps = {
   deposit: UserDeposit;
+  blockTimestamp: bigint | null;
   onActionCompleted: () => void;
 };
 
@@ -83,6 +84,7 @@ const getActionLabel = (
 
 export const DepositCard = ({
   deposit,
+  blockTimestamp,
   onActionCompleted,
 }: DepositCardProps) => {
   const [confirmationAction, setConfirmationAction] =
@@ -100,15 +102,16 @@ export const DepositCard = ({
     clearDepositActionState,
   } = useDepositActions();
 
-  const nowInSeconds = BigInt(
-    Math.floor(Date.now() / 1000),
-  );
-
   const isActive =
     deposit.status === DEPOSIT_STATUS.active;
 
+  const isBlockchainTimeAvailable =
+    blockTimestamp !== null;
+
   const isMatured =
-    isActive && nowInSeconds >= deposit.maturityAt;
+    isActive &&
+    isBlockchainTimeAvailable &&
+    blockTimestamp >= deposit.maturityAt;
 
   const isThisDepositSubmitting =
     isSubmitting &&
@@ -216,7 +219,15 @@ export const DepositCard = ({
         </div>
       </div>
 
-      {isActive && !isMatured && (
+      {isActive && !isBlockchainTimeAvailable && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-sm text-slate-600">
+            Reading the latest blockchain time...
+          </p>
+        </div>
+      )}
+
+      {isActive && isBlockchainTimeAvailable && !isMatured && (
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
 
@@ -282,7 +293,9 @@ export const DepositCard = ({
         </div>
       )}
 
-      {isActive && !confirmationAction && (
+      {isActive &&
+        isBlockchainTimeAvailable &&
+        !confirmationAction && (
         <div className="mt-6 flex flex-wrap gap-3">
           {!isMatured && (
             <button

@@ -4,6 +4,11 @@ import {
   RefreshCw,
   WalletCards,
 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import { Link } from 'react-router-dom';
 
 import { SUPPORTED_NETWORK_NAME } from '../blockchain/addresses';
@@ -16,6 +21,7 @@ import { useDeposits } from '../hooks/useDeposits';
 
 export const DepositsPage = () => {
   const {
+    provider,
     isConnected,
     isWrongNetwork,
     isMetaMaskAvailable,
@@ -28,10 +34,73 @@ export const DepositsPage = () => {
     reloadDeposits,
   } = useDeposits();
 
+  const [blockTimestamp, setBlockTimestamp] =
+    useState<bigint | null>(null);
+
+  const [
+    isLoadingBlockTimestamp,
+    setIsLoadingBlockTimestamp,
+  ] = useState(false);
+
+  const [blockTimestampError, setBlockTimestampError] =
+    useState('');
+
   const canReadBlockchain =
     isMetaMaskAvailable &&
     isConnected &&
     !isWrongNetwork;
+
+  const loadBlockTimestamp = useCallback(async () => {
+    if (!provider || !canReadBlockchain) {
+      setBlockTimestamp(null);
+      setBlockTimestampError('');
+      return;
+    }
+
+    setIsLoadingBlockTimestamp(true);
+    setBlockTimestampError('');
+
+    try {
+      const latestBlock =
+        await provider.getBlock('latest');
+
+      if (!latestBlock) {
+        throw new Error(
+          'Unable to read the latest blockchain block.',
+        );
+      }
+
+      setBlockTimestamp(
+        BigInt(latestBlock.timestamp),
+      );
+    } catch (error) {
+      setBlockTimestamp(null);
+      setBlockTimestampError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to read blockchain time.',
+      );
+    } finally {
+      setIsLoadingBlockTimestamp(false);
+    }
+  }, [provider, canReadBlockchain]);
+
+  const reloadPageData = useCallback(async () => {
+    await Promise.all([
+      reloadDeposits(),
+      loadBlockTimestamp(),
+    ]);
+  }, [reloadDeposits, loadBlockTimestamp]);
+
+  useEffect(() => {
+    void loadBlockTimestamp();
+  }, [loadBlockTimestamp]);
+
+  const pageError =
+    error || blockTimestampError;
+
+  const isRefreshing =
+    isLoading || isLoadingBlockTimestamp;
 
   return (
     <div className="space-y-8">
@@ -43,23 +112,23 @@ export const DepositsPage = () => {
             type="button"
             disabled={
               !canReadBlockchain ||
-              isLoading
+              isRefreshing
             }
             onClick={() =>
-              void reloadDeposits()
+              void reloadPageData()
             }
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               className={[
                 'h-4 w-4',
-                isLoading
+                isRefreshing
                   ? 'animate-spin'
                   : '',
               ].join(' ')}
             />
 
-            {isLoading
+            {isRefreshing
               ? 'Loading...'
               : 'Refresh'}
           </button>
@@ -95,17 +164,17 @@ export const DepositsPage = () => {
         )}
 
       {canReadBlockchain &&
-        error && (
+        pageError && (
           <StateMessage
             variant="error"
             icon={AlertTriangle}
             title="Unable to load deposits"
-            description={error}
+            description={pageError}
             action={
               <button
                 type="button"
                 onClick={() =>
-                  void reloadDeposits()
+                  void reloadPageData()
                 }
                 className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
               >
@@ -116,7 +185,7 @@ export const DepositsPage = () => {
         )}
 
       {canReadBlockchain &&
-        isLoading &&
+        isRefreshing &&
         deposits.length === 0 && (
           <section className="space-y-5">
             <LoadingCard />
@@ -125,8 +194,8 @@ export const DepositsPage = () => {
         )}
 
       {canReadBlockchain &&
-        !isLoading &&
-        !error &&
+        !isRefreshing &&
+        !pageError &&
         deposits.length === 0 && (
           <StateMessage
             icon={Landmark}
@@ -151,8 +220,9 @@ export const DepositsPage = () => {
                 <DepositCard
                   key={deposit.id.toString()}
                   deposit={deposit}
+                  blockTimestamp={blockTimestamp}
                   onActionCompleted={() => {
-                    void reloadDeposits();
+                    void reloadPageData();
                   }}
                 />
               ),
