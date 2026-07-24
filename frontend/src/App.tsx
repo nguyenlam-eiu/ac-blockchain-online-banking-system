@@ -1,12 +1,17 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+} from 'react-router-dom';
 
-import { AppLayout } from "./components/AppLayout";
-import { WalletProvider } from "./context/WalletContext";
-import { DashboardPage } from "./pages/DashboardPage";
-import { DepositsPage } from "./pages/DepositsPage";
-import { PlansPage } from "./pages/PlansPage";
-import { NotFoundPage } from "./pages/NotFoundPage";
-import { DepositDetailPage } from "./pages/DepositDetailPage";
+import { AppLayout } from './components/AppLayout';
+import { WalletProvider } from './context/WalletContext';
+import { AdminPage } from './pages/AdminPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { DepositDetailPage } from './pages/DepositDetailPage';
+import { DepositsPage } from './pages/DepositsPage';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { PlansPage } from './pages/PlansPage';
 
 function App() {
   return (
@@ -14,13 +19,30 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="plans" element={<PlansPage />} />
-            <Route path="deposits" element={<DepositsPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-            <Route path="/deposits/:depositId" element={<DepositDetailPage />} />
-
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              index
+              element={<DashboardPage />}
+            />
+            <Route
+              path="plans"
+              element={<PlansPage />}
+            />
+            <Route
+              path="deposits"
+              element={<DepositsPage />}
+            />
+            <Route
+              path="deposits/:depositId"
+              element={<DepositDetailPage />}
+            />
+            <Route
+              path="admin"
+              element={<AdminPage />}
+            />
+            <Route
+              path="*"
+              element={<NotFoundPage />}
+            />
           </Route>
         </Routes>
       </BrowserRouter>
