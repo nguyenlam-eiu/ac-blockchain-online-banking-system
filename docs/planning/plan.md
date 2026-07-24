@@ -104,6 +104,6 @@ Below is the detailed plan for 7 working days (excluding Saturdays and Sundays) 
 
 **Goal:** Frontend Demo, Documentation (README), and Video Recording.
 
-- [ ] Build Frontend using React + ethers.js.
-- [ ] Complete `README.md` (fill in 7 Design Answer questions).
-- [ ] Record Demo video (3–5 minutes).
+- [x] Build Frontend using React + ethers.js.
+- [x] Complete `README.md` (fill in 7 Design Answer questions).
+- [] Record Demo video (3–5 minutes).
