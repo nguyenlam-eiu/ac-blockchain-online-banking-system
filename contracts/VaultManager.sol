@@ -15,10 +15,22 @@ contract VaultManager is Ownable, Pausable {
     // Solvency Guard (C2): Tracks total promised interest committed to active deposits
     uint256 public totalPromisedInterest;
 
-    event VaultFunded(address indexed sender, uint256 amount);
-    event VaultWithdrawn(address indexed owner, uint256 amount);
-    event FeeReceiverSet(address indexed newFeeReceiver);
-    event SavingCoreSet(address indexed newSavingCore);
+    event VaultFunded(address indexed actor, uint256 amount, uint256 timestamp);
+    event VaultWithdrawn(address indexed actor, uint256 amount, uint256 timestamp);
+    event FeeReceiverSet(
+        address indexed actor,
+        address indexed previousFeeReceiver,
+        address indexed newFeeReceiver,
+        uint256 timestamp
+    );
+    event SavingCoreSet(
+        address indexed actor,
+        address indexed previousSavingCore,
+        address indexed newSavingCore,
+        uint256 timestamp
+    );
+    event SystemPaused(address indexed actor, uint256 timestamp);
+    event SystemUnpaused(address indexed actor, uint256 timestamp);
 
     modifier onlySavingCore() {
         require(msg.sender == savingCore, "VaultManager: only SavingCore");
@@ -33,27 +45,31 @@ contract VaultManager is Ownable, Pausable {
 
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
         require(_feeReceiver != address(0), "VaultManager: invalid address");
+        address previousFeeReceiver = feeReceiver;
         feeReceiver = _feeReceiver;
-        emit FeeReceiverSet(_feeReceiver);
+        emit FeeReceiverSet(msg.sender, previousFeeReceiver, _feeReceiver, block.timestamp);
     }
 
     function setSavingCore(address _savingCore) external onlyOwner {
         require(_savingCore != address(0), "VaultManager: invalid address");
+        address previousSavingCore = savingCore;
         savingCore = _savingCore;
-        emit SavingCoreSet(_savingCore);
+        emit SavingCoreSet(msg.sender, previousSavingCore, _savingCore, block.timestamp);
     }
 
     function pause() external onlyOwner {
         _pause();
+        emit SystemPaused(msg.sender, block.timestamp);
     }
 
     function unpause() external onlyOwner {
         _unpause();
+        emit SystemUnpaused(msg.sender, block.timestamp);
     }
 
     function fundVault(uint256 amount) external onlyOwner whenNotPaused {
         usdcToken.safeTransferFrom(msg.sender, address(this), amount);
-        emit VaultFunded(msg.sender, amount);
+        emit VaultFunded(msg.sender, amount, block.timestamp);
     }
 
     function withdrawVault(uint256 amount) external onlyOwner {
@@ -64,7 +80,7 @@ contract VaultManager is Ownable, Pausable {
             "VaultManager: cannot withdraw promised interest"
         );
         usdcToken.safeTransfer(msg.sender, amount);
-        emit VaultWithdrawn(msg.sender, amount);
+        emit VaultWithdrawn(msg.sender, amount, block.timestamp);
     }
 
     function allocateInterest(uint256 amount) external onlySavingCore {

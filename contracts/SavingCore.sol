@@ -63,7 +63,16 @@ contract SavingCore is ERC721, Ownable {
     }
 
     // ALL SAVING PLAN LOGICS.
-    event PlanCreated(uint256 indexed planId, uint256 tenorDays, uint256 aprBps);
+    event PlanCreated(
+        uint256 indexed planId,
+        address indexed actor,
+        uint256 tenorDays,
+        uint256 aprBps,
+        uint256 minDeposit,
+        uint256 maxDeposit,
+        uint256 earlyWithdrawPenaltyBps,
+        uint256 timestamp
+    );
 
     function createPlan(
         uint256 tenorDays,
@@ -91,35 +100,62 @@ contract SavingCore is ERC721, Ownable {
             enabled: true
         });
 
-        emit PlanCreated(planId, tenorDays, aprBps);
+        emit PlanCreated(
+            planId,
+            msg.sender,
+            tenorDays,
+            aprBps,
+            minDeposit,
+            maxDeposit,
+            earlyWithdrawPenaltyBps,
+            block.timestamp
+        );
 
         nextPlanId++;
     }
 
-    event PlanUpdated(uint256 indexed planId, uint256 newAprBps);
+    event PlanUpdated(
+        uint256 indexed planId,
+        address indexed actor,
+        uint256 previousAprBps,
+        uint256 newAprBps,
+        uint256 timestamp
+    );
 
     function updatePlan(uint256 planId, uint256 newAprBps) external onlyOwner {
         require(planId > 0 && planId < nextPlanId, "SavingCore: plan does not exist");
         require(newAprBps > 0, "SavingCore: APR must be greater than 0");
         require(newAprBps <= 10000, "SavingCore: APR cannot exceed 100%");
 
+        uint256 previousAprBps = plans[planId].aprBps;
         plans[planId].aprBps = newAprBps;
 
-        emit PlanUpdated(planId, newAprBps);
+        emit PlanUpdated(
+            planId,
+            msg.sender,
+            previousAprBps,
+            newAprBps,
+            block.timestamp
+        );
     }
 
-    event PlanStatusChanged(uint256 indexed planId, bool enabled);
+    event PlanStatusChanged(
+        uint256 indexed planId,
+        address indexed actor,
+        bool enabled,
+        uint256 timestamp
+    );
 
     function enablePlan(uint256 planId) external onlyOwner {
         require(planId > 0 && planId < nextPlanId, "SavingCore: plan does not exist");
         plans[planId].enabled = true;
-        emit PlanStatusChanged(planId, true);
+        emit PlanStatusChanged(planId, msg.sender, true, block.timestamp);
     }
 
     function disablePlan(uint256 planId) external onlyOwner {
         require(planId > 0 && planId < nextPlanId, "SavingCore: plan does not exist");
         plans[planId].enabled = false;
-        emit PlanStatusChanged(planId, false);
+        emit PlanStatusChanged(planId, msg.sender, false, block.timestamp);
     }
 
     // ALL DEPOSIT LOGICS.

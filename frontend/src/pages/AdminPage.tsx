@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  History,
   WalletCards,
 } from 'lucide-react';
 import {
@@ -21,6 +22,7 @@ import {
 import {
   formatAddress,
   formatBps,
+  formatTimestamp,
   formatUSDC,
 } from '../blockchain/format';
 import { PageHeader } from '../components/PageHeader';
@@ -32,6 +34,7 @@ import {
   useAdminActions,
 } from '../hooks/useAdminActions';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
+import { useAdminActivity } from '../hooks/useAdminActivity';
 
 const EMPTY_PLAN: CreatePlanInput = {
   tenorDays: '',
@@ -108,6 +111,13 @@ export const AdminPage = () => {
   } = useAdminDashboard();
 
   const {
+    activities,
+    isLoading: isActivityLoading,
+    error: activityError,
+    reloadAdminActivity,
+  } = useAdminActivity();
+
+  const {
     activeAction,
     transactionHash,
     error: actionError,
@@ -171,7 +181,10 @@ export const AdminPage = () => {
 
     if (success) {
       clear?.();
-      await reloadAdminDashboard();
+      await Promise.all([
+        reloadAdminDashboard(),
+        reloadAdminActivity(),
+      ]);
     }
   };
 
@@ -194,7 +207,10 @@ export const AdminPage = () => {
               isSubmitting
             }
             onClick={() =>
-              void reloadAdminDashboard()
+              void Promise.all([
+                reloadAdminDashboard(),
+                reloadAdminActivity(),
+              ])
             }
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
@@ -703,6 +719,113 @@ export const AdminPage = () => {
                 Update APR
               </button>
             </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-slate-500" />
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Admin Activity
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                disabled={isActivityLoading}
+                onClick={() =>
+                  void reloadAdminActivity()
+                }
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={[
+                    'h-4 w-4',
+                    isActivityLoading
+                      ? 'animate-spin'
+                      : '',
+                  ].join(' ')}
+                />
+                Refresh Activity
+              </button>
+            </div>
+
+            {activityError && (
+              <p className="mt-4 text-sm text-red-700">
+                {activityError}
+              </p>
+            )}
+
+            {!activityError &&
+              !isActivityLoading &&
+              activities.length === 0 && (
+                <p className="mt-4 text-sm text-slate-500">
+                  No admin activity was found in the latest 10,000 blocks.
+                </p>
+              )}
+
+            {activities.length > 0 && (
+              <div className="mt-5 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-4 py-3">Action</th>
+                      <th className="px-4 py-3">Actor</th>
+                      <th className="px-4 py-3">Amount / Plan</th>
+                      <th className="px-4 py-3">Transaction</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {activities.map((activity) => {
+                      const activityExplorerUrl =
+                        getTxExplorerUrl(
+                          activity.transactionHash,
+                        );
+
+                      return (
+                        <tr key={activity.id}>
+                          <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                            {formatTimestamp(
+                              activity.timestamp,
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                            {activity.action}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-600">
+                            {formatAddress(
+                              activity.actor,
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {activity.detail}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {activityExplorerUrl ? (
+                              <a
+                                href={activityExplorerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-medium text-blue-700 underline"
+                              >
+                                View transaction
+                              </a>
+                            ) : (
+                              <span className="font-mono text-xs text-slate-500">
+                                {formatAddress(
+                                  activity.transactionHash,
+                                )}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="space-y-4">

@@ -30,6 +30,11 @@ export const CONTRACT_ABIS = {
     'function setSavingCore(address newSavingCore)',
     'function pause()',
     'function unpause()',
+    'event VaultFunded(address indexed actor, uint256 amount, uint256 timestamp)',
+    'event VaultWithdrawn(address indexed actor, uint256 amount, uint256 timestamp)',
+    'event FeeReceiverSet(address indexed actor, address indexed previousFeeReceiver, address indexed newFeeReceiver, uint256 timestamp)',
+    'event SystemPaused(address indexed actor, uint256 timestamp)',
+    'event SystemUnpaused(address indexed actor, uint256 timestamp)',
   ],
   savingCore: [
     'function owner() view returns (address)',
@@ -53,6 +58,9 @@ export const CONTRACT_ABIS = {
     'function renewDeposit(uint256 depositId)',
     'function autoRenewDeposit(uint256 depositId)',
     'function claimPendingInterest()',
+    'event PlanCreated(uint256 indexed planId, address indexed actor, uint256 tenorDays, uint256 aprBps, uint256 minDeposit, uint256 maxDeposit, uint256 earlyWithdrawPenaltyBps, uint256 timestamp)',
+    'event PlanUpdated(uint256 indexed planId, address indexed actor, uint256 previousAprBps, uint256 newAprBps, uint256 timestamp)',
+    'event PlanStatusChanged(uint256 indexed planId, address indexed actor, bool enabled, uint256 timestamp)',
   ],
 } as const;
 
