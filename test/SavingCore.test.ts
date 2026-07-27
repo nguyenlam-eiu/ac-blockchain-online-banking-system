@@ -149,13 +149,23 @@ describe("SavingCore", function () {
     expect(await vault.totalPromisedInterest()).to.equal(renewedInterest);
   });
 
-  it("auto-renews within grace period to the current NFT owner", async function () {
+  it("blocks auto-renewal during the grace period", async function () {
     const { savingCore, user, otherUser } = await deploySavingFixture();
     const principal = usdc("1000");
 
     await savingCore.connect(user).openDeposit(1, principal);
     await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
     await time.increase(DEFAULT_TENOR_DAYS * DAY + DAY);
+
+    await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: grace period not ended");
+  });
+
+  it("auto-renews after the grace period to the current NFT owner", async function () {
+    const { savingCore, user, otherUser } = await deploySavingFixture();
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+    await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+    await time.increase(DEFAULT_TENOR_DAYS * DAY + GRACE_PERIOD + 1);
 
     await savingCore.autoRenewDeposit(1);
     const oldDeposit = await savingCore.deposits(1);
@@ -164,15 +174,6 @@ describe("SavingCore", function () {
     expect(oldDeposit.status).to.equal(3n);
     expect(await savingCore.ownerOf(2)).to.equal(otherUser.address);
     expect(newDeposit.aprBpsAtOpen).to.equal(DEFAULT_APR_BPS);
-  });
-
-  it("blocks auto-renewal after the grace period", async function () {
-    const { savingCore, user } = await deploySavingFixture();
-
-    await savingCore.connect(user).openDeposit(1, usdc("1000"));
-    await time.increase(DEFAULT_TENOR_DAYS * DAY + GRACE_PERIOD + 1);
-
-    await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: grace period expired");
   });
 
   it("blocks withdrawals and renewals while paused", async function () {
@@ -193,10 +194,7 @@ describe("SavingCore", function () {
     const vault = await VaultManager.deploy(ethers.ZeroAddress.replace("0x0", "0x1"));
 
     const SavingCore = await ethers.getContractFactory("SavingCore");
-    await expectRevert(
-      SavingCore.deploy(ethers.ZeroAddress, await vault.getAddress()),
-      "SavingCore: invalid token"
-    );
+    await expectRevert(SavingCore.deploy(ethers.ZeroAddress, await vault.getAddress()), "SavingCore: invalid token");
   });
 
   it("reverts constructor with zero vault address", async function () {
@@ -204,10 +202,7 @@ describe("SavingCore", function () {
     const token = await MockUSDC.deploy("Mock USDC", "mUSDC");
 
     const SavingCore = await ethers.getContractFactory("SavingCore");
-    await expectRevert(
-      SavingCore.deploy(await token.getAddress(), ethers.ZeroAddress),
-      "SavingCore: invalid vault"
-    );
+    await expectRevert(SavingCore.deploy(await token.getAddress(), ethers.ZeroAddress), "SavingCore: invalid vault");
   });
 
   // ── createPlan guards ────────────────────────────────────────────────────────
@@ -345,10 +340,7 @@ describe("SavingCore", function () {
   it("reverts withdrawAtMaturity when caller is not the owner", async function () {
     const { savingCore, user, otherUser } = await deploySavingFixture();
     await savingCore.connect(user).openDeposit(1, usdc("1000"));
-    await expectRevert(
-      savingCore.connect(otherUser).withdrawAtMaturity(1),
-      "SavingCore: not deposit owner"
-    );
+    await expectRevert(savingCore.connect(otherUser).withdrawAtMaturity(1), "SavingCore: not deposit owner");
   });
 
   it("reverts withdrawAtMaturity on already withdrawn deposit", async function () {
@@ -399,7 +391,7 @@ describe("SavingCore", function () {
     const { savingCore, token, user } = await deploySavingFixture();
     // Create a plan with zero penalty; open one deposit first so depositId 1 exists, then open depositId 2
     await savingCore.connect(user).openDeposit(1, usdc("1000")); // depositId = 1
-    await savingCore.createPlan(90, 100, 0, 0, 0);              // planId = 2
+    await savingCore.createPlan(90, 100, 0, 0, 0); // planId = 2
     await savingCore.connect(user).openDeposit(2, usdc("500")); // depositId = 2
 
     const before = await token.balanceOf(user.address);
@@ -466,5 +458,25 @@ describe("SavingCore", function () {
   it("reverts claimPendingInterest when no pending interest", async function () {
     const { savingCore, user } = await deploySavingFixture();
     await expectRevert(savingCore.connect(user).claimPendingInterest(), "SavingCore: no pending interest");
+  });
+
+  it("reverts withdrawAtMaturity after the grace period", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+
+    await time.increase(DEFAULT_TENOR_DAYS * DAY + GRACE_PERIOD + 1);
+
+    await expectRevert(savingCore.connect(user).withdrawAtMaturity(1), "SavingCore: withdrawal grace period expired");
+  });
+
+  it("reverts manual renewal after the grace period", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+
+    await time.increase(DEFAULT_TENOR_DAYS * DAY + GRACE_PERIOD + 1);
+
+    await expectRevert(savingCore.connect(user).renewDeposit(1), "SavingCore: manual renewal grace period expired");
   });
 });

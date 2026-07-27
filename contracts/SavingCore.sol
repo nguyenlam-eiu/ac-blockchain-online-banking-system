@@ -212,6 +212,10 @@ contract SavingCore is ERC721, Ownable {
         DepositCertificate storage deposit = deposits[depositId];
         require(deposit.status == DepositStatus.Active, "SavingCore: deposit not active");
         require(block.timestamp >= deposit.maturityAt, "SavingCore: not yet matured");
+        require(
+            block.timestamp <= deposit.maturityAt + GRACE_PERIOD,
+            "SavingCore: withdrawal grace period expired"
+        );
 
         deposit.status = DepositStatus.Withdrawn;
         uint256 principal = deposit.principal;
@@ -261,12 +265,12 @@ contract SavingCore is ERC721, Ownable {
 
     function renewDeposit(uint256 depositId) external {
         require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
-        _renewDeposit(depositId, msg.sender, DepositStatus.ManualRenewed, false);
+        _renewDeposit(depositId, msg.sender, DepositStatus.ManualRenewed);
     }
 
     function autoRenewDeposit(uint256 depositId) external {
         address depositOwner = ownerOf(depositId);
-        _renewDeposit(depositId, depositOwner, DepositStatus.AutoRenewed, true);
+        _renewDeposit(depositId, depositOwner, DepositStatus.AutoRenewed);
     }
 
     function claimPendingInterest() external {
@@ -283,15 +287,22 @@ contract SavingCore is ERC721, Ownable {
     function _renewDeposit(
         uint256 depositId,
         address depositOwner,
-        DepositStatus renewalType,
-        bool enforceGracePeriod
+        DepositStatus renewalType
     ) internal {
         require(!vaultManager.paused(), "SavingCore: system is paused");
         DepositCertificate storage oldDeposit = deposits[depositId];
         require(oldDeposit.status == DepositStatus.Active, "SavingCore: deposit not active");
         require(block.timestamp >= oldDeposit.maturityAt, "SavingCore: not yet matured");
-        if (enforceGracePeriod) {
-            require(block.timestamp <= oldDeposit.maturityAt + GRACE_PERIOD, "SavingCore: grace period expired");
+        if (renewalType == DepositStatus.AutoRenewed) {
+            require(
+                block.timestamp > oldDeposit.maturityAt + GRACE_PERIOD,
+                "SavingCore: grace period not ended"
+            );
+        } else {
+            require(
+                block.timestamp <= oldDeposit.maturityAt + GRACE_PERIOD,
+                "SavingCore: manual renewal grace period expired"
+            );
         }
 
         uint256 interest = oldDeposit.expectedInterest;

@@ -83,14 +83,12 @@ export const DepositDetailPage = () => {
 
   const {
     activeDepositId,
-    activeAction,
     transactionHash,
     error: actionError,
     isSubmitting: isActionSubmitting,
     earlyWithdraw,
     withdrawAtMaturity,
     renewDeposit,
-    autoRenewDeposit,
     clearDepositActionState,
   } = useDepositActions();
 
@@ -113,7 +111,6 @@ export const DepositDetailPage = () => {
     | 'early'
     | 'withdraw'
     | 'manualRenew'
-    | 'autoRenew'
     | 'transfer'
     | null
   >(null);
@@ -160,6 +157,14 @@ export const DepositDetailPage = () => {
       blockTimestamp !== null &&
       blockTimestamp <=
         graceDeadline,
+    );
+
+  const isAfterGracePeriod =
+    Boolean(
+      deposit &&
+      isMatured &&
+      blockTimestamp !== null &&
+      blockTimestamp > graceDeadline,
     );
 
   const currentTransactionHash =
@@ -218,13 +223,6 @@ export const DepositDetailPage = () => {
         await renewDeposit(
           deposit.id,
         );
-    } else if (
-      selectedAction === 'autoRenew'
-    ) {
-      success =
-        await autoRenewDeposit(
-          deposit.id,
-        );
     } else {
       success =
         await transferCertificate(
@@ -247,10 +245,7 @@ export const DepositDetailPage = () => {
         : selectedAction ===
             'manualRenew'
           ? 'Create a new active certificate using principal plus matured interest. The old certificate remains as history.'
-          : selectedAction ===
-              'autoRenew'
-            ? 'Trigger permissionless automatic renewal during the grace period. The new certificate is minted to the current owner.'
-            : 'Transfer ownership and all rights attached to this deposit certificate to the recipient address.';
+          : 'Transfer ownership and all rights attached to this deposit certificate to the recipient address.';
 
   return (
     <div className="space-y-8">
@@ -454,7 +449,7 @@ export const DepositDetailPage = () => {
                     </div>
                     <div className="flex justify-between gap-4">
                       <dt className="text-slate-500">
-                        Auto-renew deadline
+                        Grace period ends
                       </dt>
                       <dd className="text-right font-medium text-slate-900">
                         {formatTimestamp(
@@ -501,8 +496,10 @@ export const DepositDetailPage = () => {
                       </dt>
                       <dd className="text-right font-medium text-slate-900">
                         {isInsideGracePeriod
-                          ? 'Available'
-                          : 'Unavailable'}
+                          ? 'User action window'
+                          : isAfterGracePeriod
+                            ? 'Ended'
+                            : 'Not started'}
                       </dd>
                     </div>
                   </dl>
@@ -547,7 +544,15 @@ export const DepositDetailPage = () => {
               <StateMessage
                 icon={UserRound}
                 title="Read-only certificate"
-                description="The connected wallet is not the current owner. Withdrawal, manual renewal, and transfer controls are unavailable. Automatic renewal remains permissionless during the grace period."
+                description="The connected wallet is not the current owner. Withdrawal, manual renewal, and transfer controls are unavailable. Eligible deposits are processed by the automation bot after the grace period."
+              />
+            )}
+
+            {isAfterGracePeriod && isActive && (
+              <StateMessage
+                icon={Bot}
+                title="Automatic renewal pending"
+                description="The grace period has ended. The automation bot will renew this certificate and create a new active certificate."
               />
             )}
 
@@ -575,7 +580,7 @@ export const DepositDetailPage = () => {
                   )}
 
                 {isOwner &&
-                  isMatured && (
+                  isInsideGracePeriod && (
                     <>
                       <button
                         type="button"
@@ -603,21 +608,6 @@ export const DepositDetailPage = () => {
                       </button>
                     </>
                   )}
-
-                {isInsideGracePeriod && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedAction(
-                        'autoRenew',
-                      )
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
-                  >
-                    <Bot className="h-4 w-4" />
-                    Auto Renew
-                  </button>
-                )}
 
                 {isOwner && (
                   <button
@@ -692,10 +682,7 @@ export const DepositDetailPage = () => {
                       className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                     >
                       {isThisActionSubmitting
-                        ? activeAction ===
-                          'autoRenewDeposit'
-                          ? 'Auto Renewing...'
-                          : 'Processing...'
+                        ? 'Processing...'
                         : isThisTransferSubmitting
                           ? 'Transferring...'
                           : 'Confirm'}
