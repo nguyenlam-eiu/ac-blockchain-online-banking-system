@@ -20,6 +20,25 @@ async function expectRevert(action: Promise<unknown>, reason: string) {
   expect.fail(`Expected revert: ${reason}`);
 }
 
+async function getParsedEvent(contract: any, action: Promise<any>, eventName: string) {
+  const transaction = await action;
+  const receipt = await transaction.wait();
+
+  for (const log of receipt.logs) {
+    try {
+      const parsedLog = contract.interface.parseLog(log);
+
+      if (parsedLog?.name === eventName) {
+        return parsedLog;
+      }
+    } catch {
+      // Ignore events emitted by other contracts.
+    }
+  }
+
+  expect.fail(`Expected event: ${eventName}`);
+}
+
 function expectedInterest(principal: bigint, aprBps: bigint = DEFAULT_APR_BPS, tenorDays = DEFAULT_TENOR_DAYS) {
   return (principal * aprBps * BigInt(tenorDays * DAY)) / BigInt(365 * DAY * 10000);
 }
@@ -124,27 +143,34 @@ describe("SavingCore", function () {
     expect(await vault.totalPromisedInterest()).to.equal(interest);
   });
 
-  it("manually renews a matured deposit and preserves original APR", async function () {
+  it("manually renews a matured deposit into a selected new plan", async function () {
     const { token, vault, savingCore, user } = await deploySavingFixture();
     const principal = usdc("1000");
     const firstInterest = expectedInterest(principal);
     const renewedPrincipal = principal + firstInterest;
-    const renewedInterest = expectedInterest(renewedPrincipal);
+
+    const newTenorDays = 180;
+    const newAprBps = 350n;
+    const newPenaltyBps = 500n;
+
+    await savingCore.createPlan(newTenorDays, newAprBps, usdc("1"), usdc("1000000"), newPenaltyBps);
 
     await savingCore.connect(user).openDeposit(1, principal);
-    await savingCore.updatePlan(1, 100n);
     await time.increase(DEFAULT_TENOR_DAYS * DAY);
 
-    await savingCore.connect(user).renewDeposit(1);
+    await savingCore.connect(user).renewDeposit(1, 2);
     const oldDeposit = await savingCore.deposits(1);
     const newDeposit = await savingCore.deposits(2);
+
+    const renewedInterest = expectedInterest(renewedPrincipal, newAprBps, newTenorDays);
 
     expect(oldDeposit.status).to.equal(2n);
     expect(await savingCore.ownerOf(2)).to.equal(user.address);
     expect(await token.balanceOf(await savingCore.getAddress())).to.equal(renewedPrincipal);
+    expect(newDeposit.planId).to.equal(2n);
     expect(newDeposit.principal).to.equal(renewedPrincipal);
-    expect(newDeposit.aprBpsAtOpen).to.equal(DEFAULT_APR_BPS);
-    expect(newDeposit.earlyWithdrawPenaltyBpsAtOpen).to.equal(DEFAULT_PENALTY_BPS);
+    expect(newDeposit.aprBpsAtOpen).to.equal(newAprBps);
+    expect(newDeposit.earlyWithdrawPenaltyBpsAtOpen).to.equal(newPenaltyBps);
     expect(newDeposit.expectedInterest).to.equal(renewedInterest);
     expect(await vault.totalPromisedInterest()).to.equal(renewedInterest);
   });
@@ -169,7 +195,6 @@ describe("SavingCore", function () {
     const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
 
     await time.increaseTo(graceDeadline);
-
     await savingCore.autoRenewDeposit(1);
 
     const oldDeposit = await savingCore.deposits(1);
@@ -204,7 +229,7 @@ describe("SavingCore", function () {
     await vault.pause();
 
     await expectRevert(savingCore.connect(user).withdrawAtMaturity(1), "SavingCore: system is paused");
-    await expectRevert(savingCore.connect(user).renewDeposit(1), "SavingCore: system is paused");
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: system is paused");
     await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: system is paused");
   });
 
@@ -425,21 +450,42 @@ describe("SavingCore", function () {
     const { savingCore, user, otherUser } = await deploySavingFixture();
     await savingCore.connect(user).openDeposit(1, usdc("1000"));
     await time.increase(DEFAULT_TENOR_DAYS * DAY);
-    await expectRevert(savingCore.connect(otherUser).renewDeposit(1), "SavingCore: not deposit owner");
+    await expectRevert(savingCore.connect(otherUser).renewDeposit(1, 1), "SavingCore: not deposit owner");
   });
 
   it("reverts renewDeposit on non-active deposit", async function () {
     const { savingCore, user } = await deploySavingFixture();
     await savingCore.connect(user).openDeposit(1, usdc("1000"));
     await time.increase(DEFAULT_TENOR_DAYS * DAY);
-    await savingCore.connect(user).renewDeposit(1);
-    await expectRevert(savingCore.connect(user).renewDeposit(1), "SavingCore: deposit not active");
+    await savingCore.connect(user).renewDeposit(1, 1);
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: deposit not active");
   });
 
   it("reverts renewDeposit before maturity", async function () {
     const { savingCore, user } = await deploySavingFixture();
     await savingCore.connect(user).openDeposit(1, usdc("1000"));
-    await expectRevert(savingCore.connect(user).renewDeposit(1), "SavingCore: not yet matured");
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: not yet matured");
+  });
+
+  it("reverts manual renewal into a nonexistent plan", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 99), "SavingCore: target plan does not exist");
+  });
+
+  it("reverts manual renewal into a disabled plan", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    await savingCore.createPlan(180, 350, usdc("1"), usdc("1000000"), 500);
+    await savingCore.disablePlan(2);
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 2), "SavingCore: target plan is disabled");
   });
 
   // ── claimPendingInterest ─────────────────────────────────────────────────────
@@ -497,6 +543,60 @@ describe("SavingCore", function () {
 
     await time.increase(DEFAULT_TENOR_DAYS * DAY + GRACE_PERIOD + 1);
 
-    await expectRevert(savingCore.connect(user).renewDeposit(1), "SavingCore: manual renewal grace period expired");
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: manual renewal grace period expired");
+  });
+
+  it("emits the required Withdrawn event at maturity", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    const principal = usdc("1000");
+    const interest = expectedInterest(principal);
+
+    await savingCore.connect(user).openDeposit(1, principal);
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    const event = await getParsedEvent(savingCore, savingCore.connect(user).withdrawAtMaturity(1), "Withdrawn");
+
+    expect(event.args.depositId).to.equal(1n);
+    expect(event.args.owner).to.equal(user.address);
+    expect(event.args.principal).to.equal(principal);
+    expect(event.args.interest).to.equal(interest);
+    expect(event.args.isEarly).to.equal(false);
+  });
+
+  it("emits the required Withdrawn event for early withdrawal", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    const principal = usdc("1000");
+
+    await savingCore.connect(user).openDeposit(1, principal);
+
+    const event = await getParsedEvent(savingCore, savingCore.connect(user).earlyWithdraw(1), "Withdrawn");
+
+    expect(event.args.depositId).to.equal(1n);
+    expect(event.args.owner).to.equal(user.address);
+    expect(event.args.principal).to.equal(principal);
+    expect(event.args.interest).to.equal(0n);
+    expect(event.args.isEarly).to.equal(true);
+  });
+
+  it("emits the required Renewed event", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    const principal = usdc("1000");
+    const interest = expectedInterest(principal);
+    const newPrincipal = principal + interest;
+
+    await savingCore.createPlan(180, 350, usdc("1"), usdc("1000000"), 500);
+
+    await savingCore.connect(user).openDeposit(1, principal);
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    const event = await getParsedEvent(savingCore, savingCore.connect(user).renewDeposit(1, 2), "Renewed");
+
+    expect(event.args.oldDepositId).to.equal(1n);
+    expect(event.args.newDepositId).to.equal(2n);
+    expect(event.args.newPrincipal).to.equal(newPrincipal);
+    expect(event.args.newPlanId).to.equal(2n);
   });
 });

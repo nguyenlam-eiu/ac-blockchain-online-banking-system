@@ -5,9 +5,10 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./VaultManager.sol";
 
-contract SavingCore is ERC721, Ownable {
+contract SavingCore is ERC721, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     enum DepositStatus {
         Active,
@@ -130,21 +131,10 @@ contract SavingCore is ERC721, Ownable {
         uint256 previousAprBps = plans[planId].aprBps;
         plans[planId].aprBps = newAprBps;
 
-        emit PlanUpdated(
-            planId,
-            msg.sender,
-            previousAprBps,
-            newAprBps,
-            block.timestamp
-        );
+        emit PlanUpdated(planId, msg.sender, previousAprBps, newAprBps, block.timestamp);
     }
 
-    event PlanStatusChanged(
-        uint256 indexed planId,
-        address indexed actor,
-        bool enabled,
-        uint256 timestamp
-    );
+    event PlanStatusChanged(uint256 indexed planId, address indexed actor, bool enabled, uint256 timestamp);
 
     function enablePlan(uint256 planId) external onlyOwner {
         require(planId > 0 && planId < nextPlanId, "SavingCore: plan does not exist");
@@ -168,37 +158,40 @@ contract SavingCore is ERC721, Ownable {
         uint256 aprBpsAtOpen
     );
 
-    event DepositWithdrawn(
-        uint256 indexed depositId,
-        address indexed owner,
-        uint256 principal,
-        uint256 interestPaid
-    );
+    event DepositWithdrawn(uint256 indexed depositId, address indexed owner, uint256 principal, uint256 interestPaid);
 
-    event InterestDeferred(
-        uint256 indexed depositId,
-        address indexed owner,
-        uint256 amount
-    );
+    event InterestDeferred(uint256 indexed depositId, address indexed owner, uint256 amount);
 
-    event EarlyWithdrawn(
-        uint256 indexed depositId,
-        address indexed owner,
-        uint256 userReceives,
-        uint256 penaltyAmount
-    );
+    event EarlyWithdrawn(uint256 indexed depositId, address indexed owner, uint256 userReceives, uint256 penaltyAmount);
 
     event PendingInterestClaimed(address indexed user, uint256 amount);
+
     event DepositRenewed(
         uint256 indexed oldDepositId,
         uint256 indexed newDepositId,
         address indexed owner,
         uint256 principal,
         uint256 expectedInterest,
+        uint256 newPlanId,
         DepositStatus renewalType
     );
 
-    function openDeposit(uint256 planId, uint256 amount) external {
+    event Withdrawn(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 principal,
+        uint256 interest,
+        bool isEarly
+    );
+
+    event Renewed(
+        uint256 indexed oldDepositId,
+        uint256 indexed newDepositId,
+        uint256 newPrincipal,
+        uint256 indexed newPlanId
+    );
+
+    function openDeposit(uint256 planId, uint256 amount) external nonReentrant{
         require(!vaultManager.paused(), "SavingCore: system is paused");
         SavingPlan memory plan = plans[planId];
         require(planId > 0 && planId < nextPlanId, "SavingCore: plan does not exist");
@@ -242,16 +235,13 @@ contract SavingCore is ERC721, Ownable {
 
     // ALL WITHDRAWAL LOGICS.
 
-    function withdrawAtMaturity(uint256 depositId) external {
+    function withdrawAtMaturity(uint256 depositId) external nonReentrant{
         require(!vaultManager.paused(), "SavingCore: system is paused");
         require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
         DepositCertificate storage deposit = deposits[depositId];
         require(deposit.status == DepositStatus.Active, "SavingCore: deposit not active");
         require(block.timestamp >= deposit.maturityAt, "SavingCore: not yet matured");
-        require(
-            block.timestamp <= deposit.maturityAt + GRACE_PERIOD,
-            "SavingCore: withdrawal grace period expired"
-        );
+        require(block.timestamp <= deposit.maturityAt + GRACE_PERIOD, "SavingCore: withdrawal grace period expired");
 
         deposit.status = DepositStatus.Withdrawn;
         uint256 principal = deposit.principal;
@@ -269,11 +259,11 @@ contract SavingCore is ERC721, Ownable {
             pendingInterest[msg.sender] += interest;
             emit InterestDeferred(depositId, msg.sender, interest);
         }
-
         emit DepositWithdrawn(depositId, msg.sender, principal, interestPaid);
+        emit Withdrawn(depositId, msg.sender, principal, interestPaid, false);
     }
 
-    function earlyWithdraw(uint256 depositId) external {
+    function earlyWithdraw(uint256 depositId) external nonReentrant{
         require(!vaultManager.paused(), "SavingCore: system is paused");
         require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
         DepositCertificate storage deposit = deposits[depositId];
@@ -297,19 +287,26 @@ contract SavingCore is ERC721, Ownable {
         vaultManager.cancelInterest(deposit.expectedInterest);
 
         emit EarlyWithdrawn(depositId, msg.sender, userReceives, penaltyAmount);
+        emit Withdrawn(depositId, msg.sender, principal, 0, true);
     }
 
-    function renewDeposit(uint256 depositId) external {
+    function renewDeposit(uint256 depositId, uint256 newPlanId) external nonReentrant{
         require(ownerOf(depositId) == msg.sender, "SavingCore: not deposit owner");
-        _renewDeposit(depositId, msg.sender, DepositStatus.ManualRenewed);
+
+        require(newPlanId > 0 && newPlanId < nextPlanId, "SavingCore: target plan does not exist");
+
+        require(plans[newPlanId].enabled, "SavingCore: target plan is disabled");
+
+        _renewDeposit(depositId, msg.sender, DepositStatus.ManualRenewed, newPlanId);
     }
 
-    function autoRenewDeposit(uint256 depositId) external {
+    function autoRenewDeposit(uint256 depositId) external nonReentrant{
         address depositOwner = ownerOf(depositId);
-        _renewDeposit(depositId, depositOwner, DepositStatus.AutoRenewed);
+
+        _renewDeposit(depositId, depositOwner, DepositStatus.AutoRenewed, deposits[depositId].planId);
     }
 
-    function claimPendingInterest() external {
+    function claimPendingInterest() external nonReentrant{
         require(!vaultManager.paused(), "SavingCore: system is paused");
         uint256 amount = pendingInterest[msg.sender];
         require(amount > 0, "SavingCore: no pending interest");
@@ -323,7 +320,8 @@ contract SavingCore is ERC721, Ownable {
     function _renewDeposit(
         uint256 depositId,
         address depositOwner,
-        DepositStatus renewalType
+        DepositStatus renewalType,
+        uint256 targetPlanId
     ) internal {
         require(!vaultManager.paused(), "SavingCore: system is paused");
         DepositCertificate storage oldDeposit = deposits[depositId];
@@ -331,10 +329,7 @@ contract SavingCore is ERC721, Ownable {
         require(block.timestamp >= oldDeposit.maturityAt, "SavingCore: not yet matured");
 
         if (renewalType == DepositStatus.AutoRenewed) {
-            require(
-                block.timestamp >= oldDeposit.maturityAt + GRACE_PERIOD,
-                "SavingCore: grace period not ended"
-            );
+            require(block.timestamp >= oldDeposit.maturityAt + GRACE_PERIOD, "SavingCore: grace period not ended");
         } else {
             require(
                 block.timestamp <= oldDeposit.maturityAt + GRACE_PERIOD,
@@ -344,8 +339,28 @@ contract SavingCore is ERC721, Ownable {
 
         uint256 interest = oldDeposit.expectedInterest;
         uint256 newPrincipal = oldDeposit.principal + interest;
-        uint256 tenorSeconds = oldDeposit.maturityAt - oldDeposit.startAt;
-        uint256 newExpectedInterest = (newPrincipal * oldDeposit.aprBpsAtOpen * tenorSeconds) / (365 * 86400 * 10000);
+
+        uint256 newTenorSeconds;
+        uint256 newAprBps;
+        uint256 newPenaltyBps;
+        uint256 newPlanId;
+
+        if (renewalType == DepositStatus.ManualRenewed) {
+            SavingPlan memory targetPlan = plans[targetPlanId];
+
+            newPlanId = targetPlanId;
+            newTenorSeconds = targetPlan.tenorDays * 86400;
+            newAprBps = targetPlan.aprBps;
+            newPenaltyBps = targetPlan.earlyWithdrawPenaltyBps;
+        } else {
+            newPlanId = oldDeposit.planId;
+            newTenorSeconds = oldDeposit.maturityAt - oldDeposit.startAt;
+            newAprBps = oldDeposit.aprBpsAtOpen;
+            newPenaltyBps = oldDeposit.earlyWithdrawPenaltyBpsAtOpen;
+        }
+
+        uint256 newExpectedInterest = (newPrincipal * newAprBps * newTenorSeconds) / (365 * 86400 * 10000);
+
         uint256 newDepositId = nextDepositId;
 
         oldDeposit.status = renewalType;
@@ -353,12 +368,12 @@ contract SavingCore is ERC721, Ownable {
         vaultManager.payInterest(address(this), interest);
 
         deposits[newDepositId] = DepositCertificate({
-            planId: oldDeposit.planId,
+            planId: newPlanId,
             principal: newPrincipal,
             startAt: block.timestamp,
-            maturityAt: block.timestamp + tenorSeconds,
-            aprBpsAtOpen: oldDeposit.aprBpsAtOpen,
-            earlyWithdrawPenaltyBpsAtOpen: oldDeposit.earlyWithdrawPenaltyBpsAtOpen,
+            maturityAt: block.timestamp + newTenorSeconds,
+            aprBpsAtOpen: newAprBps,
+            earlyWithdrawPenaltyBpsAtOpen: newPenaltyBps,
             expectedInterest: newExpectedInterest,
             status: DepositStatus.Active
         });
@@ -367,7 +382,17 @@ contract SavingCore is ERC721, Ownable {
 
         _mint(depositOwner, newDepositId);
 
-        emit DepositRenewed(depositId, newDepositId, depositOwner, newPrincipal, newExpectedInterest, renewalType);
+        emit DepositRenewed(
+            depositId,
+            newDepositId,
+            depositOwner,
+            newPrincipal,
+            newExpectedInterest,
+            newPlanId,
+            renewalType
+        );
+
+        emit Renewed(depositId, newDepositId, newPrincipal, newPlanId);
 
         nextDepositId++;
     }
