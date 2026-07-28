@@ -160,6 +160,26 @@ describe("SavingCore", function () {
     await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: grace period not ended");
   });
 
+  it("auto-renews at the exact grace period deadline", async function () {
+    const { savingCore, user } = await deploySavingFixture();
+
+    await savingCore.connect(user).openDeposit(1, usdc("1000"));
+
+    const deposit = await savingCore.deposits(1);
+    const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+    await time.increaseTo(graceDeadline);
+
+    await savingCore.autoRenewDeposit(1);
+
+    const oldDeposit = await savingCore.deposits(1);
+    const newDeposit = await savingCore.deposits(2);
+
+    expect(oldDeposit.status).to.equal(3n);
+    expect(await savingCore.ownerOf(2)).to.equal(user.address);
+    expect(newDeposit.aprBpsAtOpen).to.equal(DEFAULT_APR_BPS);
+  });
+
   it("auto-renews after the grace period to the current NFT owner", async function () {
     const { savingCore, user, otherUser } = await deploySavingFixture();
 

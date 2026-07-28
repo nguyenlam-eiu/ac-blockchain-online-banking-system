@@ -329,9 +329,10 @@ contract SavingCore is ERC721, Ownable {
         DepositCertificate storage oldDeposit = deposits[depositId];
         require(oldDeposit.status == DepositStatus.Active, "SavingCore: deposit not active");
         require(block.timestamp >= oldDeposit.maturityAt, "SavingCore: not yet matured");
+
         if (renewalType == DepositStatus.AutoRenewed) {
             require(
-                block.timestamp > oldDeposit.maturityAt + GRACE_PERIOD,
+                block.timestamp >= oldDeposit.maturityAt + GRACE_PERIOD,
                 "SavingCore: grace period not ended"
             );
         } else {
