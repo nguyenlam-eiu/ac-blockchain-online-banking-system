@@ -599,4 +599,58 @@ describe("SavingCore", function () {
     expect(event.args.newPrincipal).to.equal(newPrincipal);
     expect(event.args.newPlanId).to.equal(2n);
   });
+
+  it("reverts manual renewal when the vault cannot fund accrued interest", async function () {
+    const { token, vault, savingCore, user } = await deploySavingFixture({ fundVault: false });
+
+    const principal = usdc("1000");
+
+    await savingCore.createPlan(180, 350, usdc("1"), usdc("1000000"), 500);
+
+    await savingCore.connect(user).openDeposit(1, principal);
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    const savingCoreBalanceBefore = await token.balanceOf(await savingCore.getAddress());
+
+    const promisedBefore = await vault.totalPromisedInterest();
+
+    await expectRevert(savingCore.connect(user).renewDeposit(1, 2), "VaultManager: insufficient vault balance");
+
+    const oldDeposit = await savingCore.deposits(1);
+
+    expect(oldDeposit.status).to.equal(0n);
+    expect(await savingCore.nextDepositId()).to.equal(2n);
+
+    expect(await token.balanceOf(await savingCore.getAddress())).to.equal(savingCoreBalanceBefore);
+
+    expect(await vault.totalPromisedInterest()).to.equal(promisedBefore);
+  });
+
+  it("replaces old promised interest with the renewed deposit interest", async function () {
+    const { vault, savingCore, user } = await deploySavingFixture();
+
+    const principal = usdc("1000");
+    const oldInterest = expectedInterest(principal);
+
+    const newTenorDays = 180;
+    const newAprBps = 350n;
+
+    await savingCore.createPlan(newTenorDays, newAprBps, usdc("1"), usdc("1000000"), 500);
+
+    await savingCore.connect(user).openDeposit(1, principal);
+
+    expect(await vault.totalPromisedInterest()).to.equal(oldInterest);
+
+    await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+    await savingCore.connect(user).renewDeposit(1, 2);
+
+    const newPrincipal = principal + oldInterest;
+
+    const newInterest = expectedInterest(newPrincipal, newAprBps, newTenorDays);
+
+    expect(await vault.totalPromisedInterest()).to.equal(newInterest);
+
+    expect(await vault.totalPromisedInterest()).to.not.equal(oldInterest + newInterest);
+  });
 });
