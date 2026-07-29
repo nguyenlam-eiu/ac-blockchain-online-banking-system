@@ -23,6 +23,10 @@ type DepositActionsState = {
   error: string;
 };
 
+type ExecuteActionOptions = {
+  newPlanId?: bigint;
+};
+
 const INITIAL_STATE: DepositActionsState = {
   activeDepositId: null,
   activeAction: null,
@@ -46,6 +50,7 @@ export const useDepositActions = () => {
     async (
       depositId: bigint,
       action: DepositAction,
+      options: ExecuteActionOptions = {},
     ): Promise<boolean> => {
       if (!signer || !isConnected) {
         setState({
@@ -72,6 +77,18 @@ export const useDepositActions = () => {
         return false;
       }
 
+      if (
+        action === 'renewDeposit' &&
+        options.newPlanId === undefined
+      ) {
+        setState({
+          ...INITIAL_STATE,
+          error: 'Select a saving plan for renewal.',
+        });
+
+        return false;
+      }
+
       setState({
         activeDepositId: depositId,
         activeAction: action,
@@ -85,27 +102,38 @@ export const useDepositActions = () => {
           signer,
         );
 
-        const transaction =
-          action === 'earlyWithdraw'
-            ? await savingCore.earlyWithdraw(
-                depositId,
-              )
-            : action === 'withdrawAtMaturity'
-              ? await savingCore.withdrawAtMaturity(
-                  depositId,
-                )
-              : action === 'renewDeposit'
-                ? await savingCore.renewDeposit(
-                    depositId,
-                  )
-                : await savingCore.autoRenewDeposit(
-                    depositId,
-                  );
+        let transaction;
+
+        if (action === 'earlyWithdraw') {
+          transaction =
+            await savingCore.earlyWithdraw(
+              depositId,
+            );
+        } else if (
+          action === 'withdrawAtMaturity'
+        ) {
+          transaction =
+            await savingCore.withdrawAtMaturity(
+              depositId,
+            );
+        } else if (
+          action === 'renewDeposit'
+        ) {
+          transaction =
+            await savingCore.renewDeposit(
+              depositId,
+              options.newPlanId,
+            );
+        } else {
+          transaction =
+            await savingCore.autoRenewDeposit(
+              depositId,
+            );
+        }
 
         setState((current) => ({
           ...current,
-          transactionHash:
-            transaction.hash,
+          transactionHash: transaction.hash,
         }));
 
         await transaction.wait();
@@ -113,8 +141,7 @@ export const useDepositActions = () => {
         setState({
           activeDepositId: null,
           activeAction: null,
-          transactionHash:
-            transaction.hash,
+          transactionHash: transaction.hash,
           error: '',
         });
 
@@ -147,9 +174,11 @@ export const useDepositActions = () => {
 
   return {
     ...state,
+
     isSubmitting:
       state.activeDepositId !== null &&
       state.activeAction !== null,
+
     earlyWithdraw: (
       depositId: bigint,
     ) =>
@@ -157,6 +186,7 @@ export const useDepositActions = () => {
         depositId,
         'earlyWithdraw',
       ),
+
     withdrawAtMaturity: (
       depositId: bigint,
     ) =>
@@ -164,13 +194,17 @@ export const useDepositActions = () => {
         depositId,
         'withdrawAtMaturity',
       ),
+
     renewDeposit: (
       depositId: bigint,
+      newPlanId: bigint,
     ) =>
       executeAction(
         depositId,
         'renewDeposit',
+        { newPlanId },
       ),
+
     autoRenewDeposit: (
       depositId: bigint,
     ) =>
@@ -178,6 +212,7 @@ export const useDepositActions = () => {
         depositId,
         'autoRenewDeposit',
       ),
+
     clearDepositActionState,
   };
 };

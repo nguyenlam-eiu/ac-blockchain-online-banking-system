@@ -10,9 +10,9 @@ function readSavingCoreAddress(): string {
     throw new Error("frontend/.env.local was not found. Run npm run demo:setup first.");
   }
   const envContent = fs.readFileSync(envPath, "utf-8");
-  const line = envContent.split(/\r?\n/).find((item) =>
-    item.startsWith("VITE_SAVING_CORE_ADDRESS=") || item.startsWith("VITE_SAVING_CORE=")
-  );
+  const line = envContent
+    .split(/\r?\n/)
+    .find((item) => item.startsWith("VITE_SAVING_CORE_ADDRESS=") || item.startsWith("VITE_SAVING_CORE="));
   if (!line) throw new Error("SavingCore address was not found in frontend/.env.local.");
   const address = line.split("=").slice(1).join("=").trim();
   if (!ethers.isAddress(address)) throw new Error(`Invalid SavingCore address: ${address}`);
@@ -39,20 +39,42 @@ async function main(): Promise<void> {
 
   for (let depositId = 1n; depositId < nextDepositId; depositId++) {
     const deposit = await savingCore.deposits(depositId);
-    const eligible = deposit.status === ACTIVE_STATUS && now > deposit.maturityAt + gracePeriod;
+
+    const eligible = deposit.status === ACTIVE_STATUS && now >= deposit.maturityAt + gracePeriod;
+
     if (!eligible) {
       skipped++;
       continue;
     }
+
     try {
-      console.log(`Renewing deposit #${depositId}...`);
+      console.log(`Deposit #${depositId} is eligible`);
+
       const tx = await savingCore.autoRenewDeposit(depositId);
+
+      console.log(`Transaction hash: ${tx.hash}`);
+
       const receipt = await tx.wait();
-      console.log(`Renewed #${depositId}: ${tx.hash} (block ${receipt?.blockNumber})`);
+
+      console.log(`Transaction confirmed in block ${receipt?.blockNumber}`);
+
+      const oldDeposit = await savingCore.deposits(depositId);
+
+      const updatedNextDepositId: bigint = await savingCore.nextDepositId();
+
+      const newDepositId = updatedNextDepositId - 1n;
+
+      const newDeposit = await savingCore.deposits(newDepositId);
+
+      console.log(`Old certificate #${depositId} status: ${oldDeposit.status}`);
+
+      console.log(`New certificate #${newDepositId} status: ${newDeposit.status}`);
+
       renewed++;
     } catch (error) {
       failed++;
-      console.error(`Failed #${depositId}:`, error);
+
+      console.error(`Failed to auto-renew deposit #${depositId}:`, error);
     }
   }
 

@@ -653,4 +653,346 @@ describe("SavingCore", function () {
 
     expect(await vault.totalPromisedInterest()).to.not.equal(oldInterest + newInterest);
   });
+
+  describe("Grace Period Boundary Edge Cases & Concurrency", function () {
+    it("1s before maturity (maturityAt - 1): withdrawAtMaturity reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt - 1n);
+      await expectRevert(savingCore.connect(user).withdrawAtMaturity(1), "SavingCore: not yet matured");
+    });
+
+    it("1s before maturity (maturityAt - 1): renewDeposit reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt - 1n);
+      await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: not yet matured");
+    });
+
+    it("1s before maturity (maturityAt - 1): autoRenewDeposit reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt - 1n);
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: not yet matured");
+    });
+
+    it("1s before maturity (maturityAt - 1): earlyWithdraw succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt - 1n);
+      await savingCore.connect(user).earlyWithdraw(1);
+      expect((await savingCore.deposits(1)).status).to.equal(1n);
+    });
+
+    it("Exact maturity (maturityAt): autoRenewDeposit reverts (grace period not ended)", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt);
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: grace period not ended");
+    });
+
+    it("Exact maturity (maturityAt): earlyWithdraw reverts (already matured)", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt);
+      await expectRevert(savingCore.connect(user).earlyWithdraw(1), "SavingCore: already matured");
+    });
+
+    it("Exact maturity (maturityAt): withdrawAtMaturity succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      await time.setNextBlockTimestamp(deposit.maturityAt);
+      await savingCore.connect(user).withdrawAtMaturity(1);
+      expect((await savingCore.deposits(1)).status).to.equal(1n);
+    });
+
+    it("Exact maturity (maturityAt): manual renewal succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+
+      await time.setNextBlockTimestamp(deposit.maturityAt);
+      await savingCore.connect(user).renewDeposit(1, 1);
+      expect((await savingCore.deposits(1)).status).to.equal(2n);
+    });
+
+    it("1s before grace deadline (maturityAt + GRACE_PERIOD - 1): autoRenewDeposit reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      await time.setNextBlockTimestamp(graceDeadline - 1n);
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: grace period not ended");
+    });
+
+    it("1s before grace deadline (maturityAt + GRACE_PERIOD - 1): withdrawAtMaturity succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      await time.setNextBlockTimestamp(graceDeadline - 1n);
+      await savingCore.connect(user).withdrawAtMaturity(1);
+      expect((await savingCore.deposits(1)).status).to.equal(1n);
+    });
+
+    it("1s before grace deadline (maturityAt + GRACE_PERIOD - 1): manual renewal succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      const targetTime = graceDeadline - 1n;
+
+      await time.setNextBlockTimestamp(targetTime);
+      await savingCore.connect(user).renewDeposit(1, 1);
+      expect((await savingCore.deposits(1)).status).to.equal(2n);
+    });
+
+    it("Exact grace deadline (maturityAt + GRACE_PERIOD): manual withdraw succeeds when executed first", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.connect(user).withdrawAtMaturity(1);
+      expect((await savingCore.deposits(1)).status).to.equal(1n);
+    });
+
+    it("Exact grace deadline (maturityAt + GRACE_PERIOD): manual renew succeeds when executed first", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.connect(user).renewDeposit(1, 1);
+      expect((await savingCore.deposits(1)).status).to.equal(2n);
+    });
+
+    it("Exact grace deadline (maturityAt + GRACE_PERIOD): auto-renew succeeds when executed first", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.autoRenewDeposit(1);
+      expect((await savingCore.deposits(1)).status).to.equal(3n);
+    });
+
+    it("1s after grace deadline (maturityAt + GRACE_PERIOD + 1): withdrawAtMaturity reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      await time.setNextBlockTimestamp(graceDeadline + 1n);
+      await expectRevert(savingCore.connect(user).withdrawAtMaturity(1), "SavingCore: withdrawal grace period expired");
+    });
+
+    it("1s after grace deadline (maturityAt + GRACE_PERIOD + 1): renewDeposit reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      await time.setNextBlockTimestamp(graceDeadline + 1n);
+      await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: manual renewal grace period expired");
+    });
+
+    it("1s after grace deadline (maturityAt + GRACE_PERIOD + 1): autoRenewDeposit succeeds", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+      await time.setNextBlockTimestamp(graceDeadline + 1n);
+      await savingCore.autoRenewDeposit(1);
+      expect((await savingCore.deposits(1)).status).to.equal(3n);
+    });
+
+    it("Exact grace deadline ordering: manual action first -> subsequent auto-renew reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.connect(user).withdrawAtMaturity(1);
+      expect((await savingCore.deposits(1)).status).to.equal(1n);
+
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: deposit not active");
+    });
+
+    it("Exact grace deadline ordering: manual renew first -> subsequent auto-renew reverts", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.connect(user).renewDeposit(1, 1);
+      expect((await savingCore.deposits(1)).status).to.equal(2n);
+
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: deposit not active");
+    });
+
+    it("Exact grace deadline ordering: auto-renew first -> subsequent manual withdraw/renew revert", async function () {
+      const { savingCore, user } = await deploySavingFixture();
+      await savingCore.connect(user).openDeposit(1, usdc("1000"));
+      const deposit = await savingCore.deposits(1);
+      const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+
+      await time.setNextBlockTimestamp(graceDeadline);
+      await savingCore.autoRenewDeposit(1);
+      expect((await savingCore.deposits(1)).status).to.equal(3n);
+
+      await expectRevert(savingCore.connect(user).withdrawAtMaturity(1), "SavingCore: deposit not active");
+
+      await expectRevert(savingCore.connect(user).renewDeposit(1, 1), "SavingCore: deposit not active");
+
+      await expectRevert(savingCore.autoRenewDeposit(1), "SavingCore: deposit not active");
+    });
+  });
+
+  // ── A. Early withdrawal after transfer ──────────────────────────────────────
+  describe("Certificate rights follow current ERC721 owner", function () {
+    describe("A. Early withdrawal after transfer", function () {
+      it("User A cannot early withdraw after transferring to User B", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture();
+        await savingCore.connect(user).openDeposit(1, usdc("1000"));
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+
+        await expectRevert(
+          savingCore.connect(user).earlyWithdraw(1),
+          "SavingCore: not deposit owner"
+        );
+      });
+
+      it("User B can early withdraw and receives payout after transfer", async function () {
+        const { token, savingCore, user, otherUser } = await deploySavingFixture();
+        const principal = usdc("1000");
+        const penalty = (principal * DEFAULT_PENALTY_BPS) / 10000n;
+
+        await savingCore.connect(user).openDeposit(1, principal);
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+
+        const beforeUserA = await token.balanceOf(user.address);
+        const beforeUserB = await token.balanceOf(otherUser.address);
+
+        await savingCore.connect(otherUser).earlyWithdraw(1);
+
+        expect(await token.balanceOf(user.address)).to.equal(beforeUserA);
+        expect(await token.balanceOf(otherUser.address)).to.equal(
+          beforeUserB + principal - penalty
+        );
+        expect((await savingCore.deposits(1)).status).to.equal(1n);
+      });
+    });
+
+    // ── B. Maturity withdrawal after transfer ────────────────────────────────
+    describe("B. Maturity withdrawal after transfer", function () {
+      it("User A cannot withdraw at maturity after transferring to User B", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture();
+        await savingCore.connect(user).openDeposit(1, usdc("1000"));
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+        await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+        await expectRevert(
+          savingCore.connect(user).withdrawAtMaturity(1),
+          "SavingCore: not deposit owner"
+        );
+      });
+
+      it("User B receives principal and interest after transfer and maturity withdrawal", async function () {
+        const { token, savingCore, user, otherUser } = await deploySavingFixture();
+        const principal = usdc("1000");
+        const interest = expectedInterest(principal);
+
+        await savingCore.connect(user).openDeposit(1, principal);
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+        await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+        const beforeUserA = await token.balanceOf(user.address);
+        const beforeUserB = await token.balanceOf(otherUser.address);
+
+        await savingCore.connect(otherUser).withdrawAtMaturity(1);
+
+        expect(await token.balanceOf(user.address)).to.equal(beforeUserA);
+        expect(await token.balanceOf(otherUser.address)).to.equal(
+          beforeUserB + principal + interest
+        );
+        expect((await savingCore.deposits(1)).status).to.equal(1n);
+      });
+    });
+
+    // ── C. Manual renewal after transfer ─────────────────────────────────────
+    describe("C. Manual renewal after transfer", function () {
+      it("User A cannot manually renew after transferring to User B", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture();
+        await savingCore.connect(user).openDeposit(1, usdc("1000"));
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+        await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+        await expectRevert(
+          savingCore.connect(user).renewDeposit(1, 1),
+          "SavingCore: not deposit owner"
+        );
+      });
+
+      it("User B can manually renew; old NFT becomes ManualRenewed and new NFT is minted to User B", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture();
+        await savingCore.connect(user).openDeposit(1, usdc("1000"));
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+        await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+        await savingCore.connect(otherUser).renewDeposit(1, 1);
+
+        expect((await savingCore.deposits(1)).status).to.equal(2n);   // ManualRenewed
+        expect(await savingCore.ownerOf(2)).to.equal(otherUser.address);
+        expect((await savingCore.deposits(2)).status).to.equal(0n);   // Active
+      });
+    });
+
+    // ── D. Auto-renew after transfer ─────────────────────────────────────────
+    describe("D. Auto-renew after transfer", function () {
+      it("autoRenewDeposit mints new NFT to User B (current ERC721 owner) after transfer", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture();
+        await savingCore.connect(user).openDeposit(1, usdc("1000"));
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+
+        const deposit = await savingCore.deposits(1);
+        const graceDeadline = deposit.maturityAt + BigInt(GRACE_PERIOD);
+        await time.setNextBlockTimestamp(graceDeadline);
+        await savingCore.autoRenewDeposit(1);
+
+        expect((await savingCore.deposits(1)).status).to.equal(3n);   // AutoRenewed
+        expect(await savingCore.ownerOf(2)).to.equal(otherUser.address);
+        expect((await savingCore.deposits(2)).status).to.equal(0n);   // Active
+      });
+    });
+
+    // ── E. Pending interest follows the withdrawing owner ────────────────────
+    describe("E. Pending interest is credited to the caller who performed the withdrawal", function () {
+      it("when vault is insolvent, pending interest is assigned to User B (current owner), not User A (original depositor)", async function () {
+        const { savingCore, user, otherUser } = await deploySavingFixture({ fundVault: false });
+        const principal = usdc("1000");
+        const interest = expectedInterest(principal);
+
+        await savingCore.connect(user).openDeposit(1, principal);
+        await savingCore.connect(user).transferFrom(user.address, otherUser.address, 1);
+        await time.increase(DEFAULT_TENOR_DAYS * DAY);
+
+        await savingCore.connect(otherUser).withdrawAtMaturity(1);
+
+        // Interest deferred to User B (current owner at withdrawal time), not User A
+        expect(await savingCore.pendingInterest(otherUser.address)).to.equal(interest);
+        expect(await savingCore.pendingInterest(user.address)).to.equal(0n);
+      });
+    });
+  });
 });
