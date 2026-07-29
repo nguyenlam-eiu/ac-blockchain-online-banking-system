@@ -52,7 +52,7 @@ Create or overwrite `docs/progress/dayN.md` (where N is the day number) with the
 
 1. **Include function signatures** — not just names. Write `withdrawAtMaturity(uint256 depositId)`, not just "withdrawal function".
 2. **Include struct fields** — if a struct was added or modified, show all fields with types.
-3. **Include the formula** — if there's a calculation (interest, penalty), write it out: `expectedInterest = (amount * aprBps * tenorSeconds) / (365 * 86400 * 10000)`.
+3. **Include the formula** — if there's a calculation (interest, penalty), write it out: `expectedInterest = (principal * aprBps * tenorSeconds) / (BPS_DENOMINATOR * SECONDS_PER_YEAR)` (where `BPS_DENOMINATOR = 10_000` and `SECONDS_PER_YEAR = 365 days`).
 4. **Include guard conditions** — what requires/modifiers protect each function.
 5. **Include event names and parameters** — full indexed/non-indexed parameter list.
 6. **Include design decisions** — WHY was a choice made (e.g., "penalty goes to feeReceiver, not vault, to separate fee revenue from interest reserves").

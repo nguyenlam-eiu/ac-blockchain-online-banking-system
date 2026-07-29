@@ -27,6 +27,8 @@ Student-specific configuration:
 * Early Withdrawal Penalty: `400 bps` (`4.00%`)
 * Default Tenor: `90 days`
 * MockUSDC decimals: `6`
+* Contract Constants: `BPS_DENOMINATOR` = `10_000`, `SECONDS_PER_DAY` = `1 days`, `SECONDS_PER_YEAR` = `365 days`
+* Interest Formula: `_calculateInterest(principal, aprBps, tenorSeconds)` calculates `(principal * aprBps * tenorSeconds) / (BPS_DENOMINATOR * SECONDS_PER_YEAR)`
 
 Never assume ERC20 tokens use 18 decimals.
 
