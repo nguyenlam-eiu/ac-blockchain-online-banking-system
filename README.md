@@ -1,143 +1,104 @@
 # BLOCKCHAIN ONLINE BANKING SYSTEM
 
-A modular Ethereum term-deposit banking DApp built with Solidity, Hardhat, React, TypeScript, ethers v6, and MetaMask.
-
-> **Repository status:** Complete and demo-ready. Smart contracts, automated tests, coverage, Sepolia deployment support, the React frontend, the owner administration dashboard, certificate lifecycle features, and the automated Hardhat Localhost demo workflow are implemented.
+A modular Ethereum term-deposit banking DApp built with Solidity 0.8.28, Hardhat, React 18, TypeScript, ethers v6, Vite, Tailwind CSS, and MetaMask.
 
 ---
 
 ## Student Information
 
 | Field | Value |
-|---|---|
-| Full Name | **Nguyen Lam** |
+| --- | --- |
+| Full Name | **Lam Thoai Binh Nguyen** |
 | Student ID | **2231200021** |
 | Project | **Blockchain Online Banking System** |
 | Primary Use Case | Tokenized term deposits with ERC721 deposit certificates |
 
-> Review the full name before final submission and replace it if the official school record uses a different spelling.
-
 ### Personal Variant Configuration
 
-The project parameters derived from Student ID `2231200021` are:
+The parameters configured in contract code, setup scripts, and tests based on Student ID `2231200021` are:
 
 | Parameter | Value | Contract Representation |
-|---|---:|---:|
-| Grace Period | 3 days | `3 days` |
-| Default APR | 2.25% | `225` bps |
+| --- | ---:| ---:|
+| Grace Period | 3 days | `3 days` (`259,200` seconds) |
+| Default Plan APR | 2.25% | `225` bps |
 | Early Withdrawal Penalty | 4.00% | `400` bps |
-| Default Tenor | 90 days | `90` days |
-| MockUSDC Decimals | 6 | `10^6` base units |
-
-These parameters are used by the default deployment plan and the contract test suite.
+| Default Tenor | 90 days | `90` days (`7,776,000` seconds) |
+| MockUSDC Decimals | 6 | `6` decimals (`10^6` base units) |
 
 ---
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
-- [Key Features](#key-features)
-- [System Architecture](#system-architecture)
-- [Separation of Funds](#separation-of-funds)
+- [Core Features](#core-features)
+- [Architecture](#architecture)
 - [Smart Contracts](#smart-contracts)
+- [Separation of Principal and Interest](#separation-of-principal-and-interest)
+- [Deposit Certificate and Ownership Model](#deposit-certificate-and-ownership-model)
 - [Deposit Lifecycle](#deposit-lifecycle)
-- [Creative Challenges](#creative-challenges)
-- [Seven Structural Design Answers](#seven-structural-design-answers)
+- [Manual Renewal](#manual-renewal)
+- [Auto-Renewal and Off-Chain Bot](#auto-renewal-and-off-chain-bot)
+- [Grace-Period Boundary Rules](#grace-period-boundary-rules)
+- [C1 Principal Safety](#c1-principal-safety)
+- [C2 Solvency Guard](#c2-solvency-guard)
+- [Pause Policy](#pause-policy)
+- [Security Protections and Limitations](#security-protections-and-limitations)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
 - [Installation](#installation)
-- [Testing and Coverage](#testing-and-coverage)
+- [Environment Variables](#environment-variables)
+- [Compile, Test, and Frontend Build](#compile-test-and-frontend-build)
 - [Local Demo](#local-demo)
-- [Frontend](#frontend)
+- [Advancing Blockchain Time](#advancing-blockchain-time)
+- [Auto-Renew Bot](#auto-renew-bot)
+- [Frontend Capabilities](#frontend-capabilities)
 - [Sepolia Deployment](#sepolia-deployment)
-- [Security and Scope Notes](#security-and-scope-notes)
-- [Demo Video](#demo-video)
-- [Documentation](#documentation)
+- [Design Answers](#design-answers)
+- [Useful Commands](#useful-commands)
+- [Final Verification Status](#final-verification-status)
 - [License](#license)
 
 ---
 
 ## Project Overview
 
-The Blockchain Online Banking System models a bank term-deposit product using three independent smart contracts:
+The Blockchain Online Banking System models a commercial bank term-deposit product using three decoupled smart contracts:
 
-- `MockUSDC` provides a 6-decimal ERC20 test currency.
-- `SavingCore` manages saving plans, accepts user principal, and represents each deposit as an ERC721 certificate.
-- `VaultManager` holds the bank-funded interest reserve and protects promised interest obligations.
+- **`MockUSDC.sol`**: Provides a 6-decimal ERC20 test currency.
+- **`SavingCore.sol`**: Manages savings plans, holds user principal, and issues transferable ERC721 deposit certificates.
+- **`VaultManager.sol`**: Holds the bank-funded interest reserve and enforces solvency protection on promised interest obligations.
 
-The React frontend allows a MetaMask user to:
-
-- connect a wallet;
-- view MockUSDC balance and deposit summaries;
-- browse saving plans;
-- approve and open deposits;
-- view owned deposit certificates;
-- withdraw early with a penalty;
-- withdraw principal and interest at maturity;
-- renew a matured deposit into a new certificate;
-- claim deferred interest after the vault is replenished;
-- open a dedicated deposit-certificate detail page;
-- transfer an ERC721 deposit certificate to another wallet;
-- manually renew into a selected enabled plan and observe bot-triggered auto-renewal after the grace deadline;
-- run the complete workflow on Sepolia or Hardhat Localhost.
-
-The owner administration interface additionally supports plan management, vault funding and excess withdrawal, pause controls, fee-receiver configuration, and solvency monitoring.
+A React frontend connected via MetaMask allows depositors to manage term deposits and certificate NFTs, while providing bank administrators with plan management, vault liquidity controls, and solvency tracking.
 
 ---
 
-## Key Features
+## Core Features
 
 ### User Features
 
-- MetaMask wallet connection
-- Account and network change detection
-- Wrong-network and disconnected-wallet states
-- MockUSDC balance display using 6 decimals
-- Saving-plan discovery
-- Allowance-aware `approve → openDeposit` flow
-- ERC721 deposit certificate ownership checks
-- Early withdrawal
-- Mature withdrawal
-- Manual renewal
-- Pending-interest balance and claim flow
-- Dedicated deposit-certificate detail page
-- Certificate transfer between wallets
-- Manual renewal with plan selection and bot-triggered automatic renewal
-- Blockchain-time-based maturity detection
-- Readable transaction and contract errors
-- Responsive banking dashboard UI
+- **Wallet Integration**: MetaMask wallet connection, network detection, and account change listeners.
+- **Token Formatting**: 6-decimal safe formatting for all MockUSDC values.
+- **Plan Discovery**: Browse enabled saving plans with APR, tenor, limits, and penalty terms.
+- **Deposit Opening**: Allowance-aware approval flow (`approve` $\rightarrow$ `openDeposit`) minting an ERC721 certificate NFT.
+- **Certificate Portfolio**: View owned deposit certificates, active statuses, maturity dates, and accrued expected interest.
+- **Early Withdrawal**: Early exit prior to maturity returning principal minus penalty (penalty sent to `feeReceiver`).
+- **Mature Withdrawal**: Complete withdrawal of principal from `SavingCore` and interest from `VaultManager` upon maturity.
+- **Manual Renewal**: Renew matured deposits during the grace period into a selected enabled plan, minting a new certificate.
+- **Deferred Interest Claiming**: Claim pending interest accumulated under C1 Principal Safety once the vault is replenished.
+- **Certificate Transfer**: Transfer certificate NFTs to other wallets; withdrawal and renewal rights automatically follow the current owner.
+- **Certificate Detail Page**: Dedicated view showing full certificate metadata, lifecycle history, transfer tools, and renewal plan selection.
 
 ### Administration Features
 
-- Owner-wallet verification
-- Vault balance, promised-interest, and excess-liquidity summaries
-- Vault funding with allowance-aware approval
-- C2-protected excess-liquidity withdrawal
-- Pause and unpause controls
-- Saving-plan creation
-- APR updates for future deposits
-- Plan enable and disable controls
-- On-chain fee-receiver address updates
-- Browser-local display name for the penalty receiver
-
-### Contract Features
-
-- Admin-managed saving plans
-- APR and penalty snapshots at deposit opening
-- Transferable ERC721 deposit certificates
-- Separate principal and interest pools
-- Pause and unpause controls
-- C1 deferred-interest recovery
-- C2 solvency guard
-- Manual renewal into a selected enabled plan
-- Bot-triggered auto-renewal at or after the grace deadline
-- Historical certificate status transitions with a newly minted active certificate
-- Promised-interest accounting
-- Reentrancy protection on external financial entry points
+- **Owner Access Control**: Dedicated Admin view restricted to contract owner wallet.
+- **Plan Management**: Create plans, update future APRs, and enable or disable plans.
+- **Vault Liquidity**: Fund interest reserve and withdraw surplus unallocated USDC while respecting Solvency Guard (C2).
+- **Pause Control**: System-wide emergency pause and unpause functionality.
+- **Fee Destination**: Configure the on-chain `feeReceiver` address for early withdrawal penalties.
 
 ---
 
-## System Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -154,7 +115,7 @@ flowchart LR
 
     User -- approve + principal --> Core
     Core -- principal withdrawal --> User
-    Core -- mint certificate --> User
+    Core -- mint certificate NFT --> User
 
     Owner -- fund interest reserve --> Vault
     Core -- allocate / cancel promised interest --> Vault
@@ -165,108 +126,54 @@ flowchart LR
     Owner -- pause / unpause --> Vault
 ```
 
-### Why Three Contracts?
-
-The contracts are intentionally decoupled:
-
-1. **MockUSDC** isolates token behavior from banking logic.
-2. **SavingCore** owns the deposit lifecycle and user principal.
-3. **VaultManager** owns the interest reserve and bank solvency rules.
-
-This design reduces responsibility overlap, makes contract balances auditable, and prevents bank-funded interest liquidity from being mixed with customer principal.
-
----
-
-## Separation of Funds
-
-The system structurally separates two financial pools.
-
-### Principal Pool
-
-User principal is transferred to:
-
-```solidity
-address(SavingCore)
-```
-
-when `openDeposit` executes.
-
-At maturity, principal is always returned directly from `SavingCore`:
-
-```solidity
-usdcToken.safeTransfer(msg.sender, principal);
-```
-
-### Interest Pool
-
-The bank or contract owner funds:
-
-```solidity
-address(VaultManager)
-```
-
-through `fundVault`.
-
-Interest is paid only through:
-
-```solidity
-vaultManager.payInterest(receiver, amount);
-```
-
-### Structural Proof
-
-| Fund Type | Holding Contract | Deposit Source | Payment Destination |
-|---|---|---|---|
-| User principal | `SavingCore` | Depositor | Depositor or renewed deposit |
-| Bank interest reserve | `VaultManager` | Contract owner | Depositor or `SavingCore` during renewal |
-| Early-withdrawal penalty | Fee receiver | Deducted from principal | Configured fee receiver |
-
-`SavingCore` cannot use principal as bank interest liquidity. `VaultManager` does not custody the user's principal. Their token balances are independent and can be inspected separately on-chain.
-
 ---
 
 ## Smart Contracts
 
 ### `MockUSDC.sol`
-
-A test ERC20 token with:
-
-- name: `Mock USDC`;
-- symbol: `mUSDC`;
-- 6 decimals;
-- public minting for testing and demonstration.
-
-> `MockUSDC` is not production USDC and has no real monetary value.
+- **Type**: Standard ERC20 Token.
+- **Decimals**: Fixed 6 decimals (`decimals() returns 6`).
+- **Minting**: Public `mint(address to, uint256 amount)` for testing and local demonstration setup.
 
 ### `VaultManager.sol`
-
-Responsibilities:
-
-- hold the interest reserve;
-- configure the fee receiver;
-- authorize `SavingCore`;
-- pause and unpause guarded operations;
-- fund and withdraw vault liquidity;
-- track `totalPromisedInterest`;
-- allocate, cancel, and pay interest;
-- block owner withdrawals that would violate solvency.
+- **Inheritance**: OpenZeppelin `Ownable`, `Pausable`.
+- **Responsibilities**:
+  - Holds bank-funded interest liquidity.
+  - Manages `feeReceiver` address receiving early withdrawal penalties.
+  - Authorizes `SavingCore` address via `setSavingCore(address)`.
+  - Tracks `totalPromisedInterest` committed to active deposits.
+  - Enforces Solvency Guard (C2): Owner `withdrawVault` requires `currentBalance - amount >= totalPromisedInterest`.
 
 ### `SavingCore.sol`
+- **Inheritance**: OpenZeppelin `ERC721("Deposit Certificate", "DEPOSIT")`, `Ownable`, `ReentrancyGuard`.
+- **Responsibilities**:
+  - Holds user principal tokens.
+  - Manages saving plan definitions (`SavingPlan` struct).
+  - Calculates interest using `_calculateInterest(principal, aprBps, tenorSeconds)`.
+  - Issues transferable ERC721 deposit certificate NFTs (`DepositCertificate` struct).
+  - Handles mature withdrawal, C1 deferred interest, early withdrawal penalty routing, manual renewal into a selected plan, and permissionless auto-renewal.
 
-Responsibilities:
+---
 
-- create, update, enable, and disable plans;
-- accept principal;
-- snapshot plan terms;
-- calculate expected interest;
-- mint ERC721 deposit certificates;
-- process early and mature withdrawals;
-- defer unpaid interest;
-- support pending-interest claims;
-- support manual renewal into a selected plan and permissionless bot-triggered automatic renewal;
-- protect external financial entry points with `ReentrancyGuard`.
+## Separation of Principal and Interest
 
-### Deposit Statuses
+User principal and bank interest reserves are strictly segregated into separate contracts:
+
+| Reserve Type | Holding Contract | Source | Destination |
+| --- | --- | --- | --- |
+| **User Principal** | `SavingCore` | Depositor (`safeTransferFrom`) | Depositor on withdrawal, or `SavingCore` on renewal |
+| **Bank Interest Liquidity** | `VaultManager` | Owner (`fundVault`) | Depositor on mature withdrawal, or `SavingCore` on renewal |
+| **Early Withdrawal Penalty** | `VaultManager.feeReceiver` | Deducted from principal | Configured `feeReceiver` address |
+
+- `SavingCore` never uses customer principal to pay bank interest.
+- `VaultManager` never holds customer principal.
+- Token balances are completely independent and auditable on-chain.
+
+---
+
+## Deposit Certificate and Ownership Model
+
+Each deposit position is represented as a unique ERC721 non-fungible token (NFT):
 
 ```solidity
 enum DepositStatus {
@@ -277,6 +184,10 @@ enum DepositStatus {
 }
 ```
 
+- **Ownership Gate**: Withdrawal (`withdrawAtMaturity`, `earlyWithdraw`) and manual renewal (`renewDeposit`) check `ownerOf(depositId) == msg.sender`.
+- **Transferability**: Standard ERC721 `transferFrom` transfers certificate ownership. Upon transfer, the previous owner loses action rights and the new owner gains them.
+- **Audit History**: `SavingCore` never calls `_burn`. When a deposit is withdrawn or renewed, its existing ERC721 token is **retained** and its `DepositCertificate` mapping record remains. Only the `status` field changes: `Withdrawn`, `ManualRenewed`, or `AutoRenewed`. A certificate with any of these statuses cannot perform active financial actions. For renewals, a new `Active` certificate NFT is minted to the current owner.
+
 ---
 
 ## Deposit Lifecycle
@@ -284,209 +195,142 @@ enum DepositStatus {
 ```mermaid
 stateDiagram-v2
     [*] --> Active: openDeposit
-
-    Active --> Withdrawn: earlyWithdraw before maturity
-    Active --> Withdrawn: withdrawAtMaturity
-    Active --> ManualRenewed: renewDeposit
-    Active --> AutoRenewed: autoRenewDeposit
-
+    Active --> Withdrawn: earlyWithdraw (before maturity)
+    Active --> Withdrawn: withdrawAtMaturity (matured)
+    Active --> ManualRenewed: renewDeposit (in grace period)
+    Active --> AutoRenewed: autoRenewDeposit (at or after grace deadline)
     ManualRenewed --> Active: new ERC721 certificate
     AutoRenewed --> Active: new ERC721 certificate
 ```
 
-### Open Deposit
+### 1. `openDeposit(uint256 planId, uint256 amount)`
+- Requires system is not paused and plan is enabled.
+- Validates `amount` against plan `minDeposit` and `maxDeposit`.
+- Transfers principal from depositor to `SavingCore`.
+- Calculates expected interest using internal helper `_calculateInterest`:
+  $$\text{expectedInterest} = \frac{\text{principal} \times \text{aprBps} \times \text{tenorSeconds}}{\text{BPS\_DENOMINATOR} \times \text{SECONDS\_PER\_YEAR}}$$
+  *(where `BPS_DENOMINATOR = 10_000` and `SECONDS_PER_YEAR = 365 days`)*.
+- Creates `DepositCertificate` snapshotting `aprBps` and `earlyWithdrawPenaltyBps`.
+- Calls `vaultManager.allocateInterest(expectedInterest)` to register promised interest under C2.
+- Mints a new deposit certificate NFT to `msg.sender`.
 
-1. User selects an enabled plan.
-2. Frontend validates min/max and 6-decimal precision.
-3. Frontend checks the user's MockUSDC balance.
-4. Frontend checks current allowance.
-5. Approval is sent only when allowance is insufficient.
-6. `SavingCore.openDeposit(planId, amount)` transfers principal.
-7. APR and penalty are snapshotted.
-8. Expected interest is allocated in `VaultManager`.
-9. A new ERC721 certificate is minted to the user.
+### 2. `earlyWithdraw(uint256 depositId)`
+- Requires caller is `ownerOf(depositId)`, status is `Active`, and `block.timestamp < maturityAt`.
+- Status changes to `Withdrawn`.
+- Penalty calculated: $\text{penaltyAmount} = \frac{\text{principal} \times \text{earlyWithdrawPenaltyBpsAtOpen}}{10,000}$.
+- Returns remaining principal ($\text{principal} - \text{penaltyAmount}$) to caller.
+- Transfers `penaltyAmount` to `vaultManager.feeReceiver()`.
+- Calls `vaultManager.cancelInterest(expectedInterest)` to release C2 promised interest.
 
-### Early Withdrawal
-
-Before maturity:
-
-- no interest is paid;
-- penalty is calculated from the snapshotted penalty BPS;
-- remaining principal is returned;
-- penalty is transferred to the fee receiver;
-- promised interest is cancelled in `VaultManager`.
-
-### Mature Withdrawal
-
-At or after maturity:
-
-- principal is returned from `SavingCore`;
-- interest is requested from `VaultManager`;
-- if interest cannot be paid, principal still succeeds and interest becomes pending under C1.
-
-### Manual Renewal
-
-From maturity through the grace deadline, inclusive:
-
-- only the current ERC721 owner may call `renewDeposit(depositId, newPlanId)`;
-- `newPlanId` must exist and remain enabled;
-- the old certificate becomes `ManualRenewed`;
-- matured interest is paid from `VaultManager` to `SavingCore`;
-- new principal becomes `old principal + matured interest`;
-- a new active certificate is minted to the current owner;
-- the new certificate snapshots the selected plan's current tenor, APR, and early-withdrawal penalty;
-- the old promised-interest obligation is replaced by the new certificate's obligation.
-
-### Automatic Renewal
-
-At or after `maturityAt + GRACE_PERIOD`, any caller may trigger `autoRenewDeposit(depositId)` for an active matured certificate. A local bot scans eligible certificates and submits the transaction.
-
-- the old certificate becomes `AutoRenewed`;
-- a new active certificate is minted to the current ERC721 owner;
-- the renewed principal is `old principal + matured interest`;
-- the new certificate preserves the old certificate's plan ID, tenor, APR snapshot, and penalty snapshot;
-- the old certificate remains on-chain as lifecycle history.
-
-At the exact grace deadline, manual actions and auto-renewal are both initially eligible. Only the first confirmed transaction succeeds because it changes the old certificate away from `Active`.
+### 3. `withdrawAtMaturity(uint256 depositId)`
+- Requires caller is `ownerOf(depositId)`, status is `Active`, `block.timestamp >= maturityAt`, and `block.timestamp <= maturityAt + GRACE_PERIOD`.
+- Status changes to `Withdrawn`.
+- Principal is transferred from `SavingCore` to caller.
+- Attempts interest payment via `try vaultManager.payInterest(msg.sender, interest)`.
+- **C1 Safety**: If `payInterest` reverts (vault insolvent), principal withdrawal still completes, and unpaid interest is recorded in `pendingInterest[msg.sender]`.
 
 ---
 
-## Creative Challenges
+## Manual Renewal
 
-## C1 — Principal Safety
+**Signature**: `renewDeposit(uint256 depositId, uint256 newPlanId)`
 
-### Problem
-
-A bank interest vault may temporarily lack enough liquidity to pay promised interest. A naive implementation could revert the entire withdrawal, trapping the user's principal.
-
-### Design
-
-`withdrawAtMaturity` returns principal first:
-
-```solidity
-usdcToken.safeTransfer(msg.sender, principal);
-```
-
-It then attempts interest payment using `try/catch`:
-
-```solidity
-try vaultManager.payInterest(msg.sender, interest) {
-    interestPaid = interest;
-} catch {
-    pendingInterest[msg.sender] += interest;
-    emit InterestDeferred(depositId, msg.sender, interest);
-}
-```
-
-### Result
-
-- principal is never blocked by temporary interest insolvency;
-- unpaid interest is recorded per user;
-- the user may call `claimPendingInterest()` after the vault is funded;
-- the promised-interest obligation remains tracked.
-
-This satisfies the principal-safety requirement without silently forgiving the bank's debt.
+- **Authorization**: Caller must be `ownerOf(depositId)`.
+- **Eligibility**: Deposit status must be `Active`, `block.timestamp >= maturityAt`, and `block.timestamp <= maturityAt + GRACE_PERIOD`.
+- **Plan Selection**: Target `newPlanId` must exist and be enabled. Manual renewal snapshots the selected plan's tenor, APR, and early withdrawal penalty.
+- **Financial Flow**:
+  1. Old deposit status changes to `ManualRenewed`.
+  2. Matured interest is paid from `VaultManager` to `SavingCore` via `vaultManager.payInterest(address(this), interest)`.
+  3. New principal is set to $\text{oldPrincipal} + \text{maturedInterest}$.
+  4. A new active deposit certificate is created with new expected interest calculated for `newPlanId`.
+  5. Calls `vaultManager.allocateInterest(newExpectedInterest)` for C2 solvency tracking.
+  6. Mints a new ERC721 certificate NFT to `msg.sender`.
 
 ---
 
-## C2 — Solvency Guard
+## Auto-Renewal and Off-Chain Bot
 
-### Problem
+**Signature**: `autoRenewDeposit(uint256 depositId)`
 
-The owner must not withdraw interest liquidity already promised to active deposits.
+- **Authorization**: Permissionless (callable by anyone, including the off-chain keeper bot).
+- **Eligibility**: Deposit status must be `Active` and `block.timestamp >= maturityAt + GRACE_PERIOD`.
+- **Ownership Resolution**: Evaluates `address depositOwner = ownerOf(depositId)` at execution time and mints the renewed certificate NFT to the current owner.
+- **Preserved Terms**: Preserves the old deposit's plan ID, tenor, snapshotted APR, and snapshotted penalty rate to protect users against rate decreases during automatic rollover.
+- **Financial Flow**:
+  1. Old deposit status changes to `AutoRenewed`.
+  2. Matured interest is paid from `VaultManager` to `SavingCore`.
+  3. New principal becomes $\text{oldPrincipal} + \text{maturedInterest}$.
+  4. Mints a new active ERC721 certificate NFT to `depositOwner`.
+  5. Allocates new promised interest in `VaultManager`.
 
-### Design
-
-When a deposit opens:
-
-```solidity
-vaultManager.allocateInterest(expectedInterest);
-```
-
-`VaultManager` tracks:
-
-```solidity
-uint256 public totalPromisedInterest;
-```
-
-Owner withdrawal is allowed only when the post-withdrawal balance remains sufficient:
-
-```solidity
-require(
-    currentBalance - amount >= totalPromisedInterest,
-    "VaultManager: cannot withdraw promised interest"
-);
-```
-
-Obligations are reduced only when:
-
-- interest is paid; or
-- an early withdrawal cancels the related interest.
-
-### Result
-
-The owner can withdraw only true excess liquidity, while committed interest remains reserved.
+### Off-Chain Automation Model
+Smart contracts do not execute by themselves. The local auto-renew bot (`scripts/auto-renew-bot.ts`) represents an off-chain keeper service. When launched via `npm run bot:auto-renew`, it runs a continuous 5-second polling loop that scans for eligible certificates and submits `autoRenewDeposit` transactions. In a production deployment, this script can be executed periodically via cron, a dedicated worker, Chainlink Automation, or Gelato.
 
 ---
 
-## Seven Structural Design Answers
+## Grace-Period Boundary Rules
 
-### 1. Why is the system split into three contracts?
+The time conditions in `SavingCore.sol` enforce strict state exclusivity:
 
-Each contract has one financial responsibility. `MockUSDC` is the currency, `SavingCore` manages customer deposits and principal, and `VaultManager` manages bank-funded interest. This separation improves auditability and prevents accidental fund mixing.
+| Time Phase | `block.timestamp` Condition | Eligible Actions |
+| --- | --- | --- |
+| **Pre-Maturity** | `block.timestamp < maturityAt` | `earlyWithdraw` |
+| **Matured (Grace Period)** | `block.timestamp >= maturityAt` and `block.timestamp <= maturityAt + GRACE_PERIOD` | `withdrawAtMaturity`, `renewDeposit` (manual) |
+| **At or After Grace Deadline** | `block.timestamp >= maturityAt + GRACE_PERIOD` | `autoRenewDeposit` |
 
-### 2. Why is each deposit represented as an ERC721 certificate?
+### Exact Grace Deadline Behavior (`maturityAt + GRACE_PERIOD`)
+At the exact boundary `block.timestamp == maturityAt + GRACE_PERIOD`:
+- Manual withdrawal/renewal (`<=`) and auto-renewal (`>=`) are both time-eligible because `block.timestamp >= maturityAt + GRACE_PERIOD` is satisfied at the exact deadline as well as at any time thereafter.
+- Whichever transaction confirms first changes the deposit status from `Active` to `Withdrawn`, `ManualRenewed`, or `AutoRenewed`.
+- The second transaction will revert with `"SavingCore: deposit not active"` because the status is no longer `Active`.
 
-A deposit is a unique financial position with its own principal, plan, opening time, maturity, APR snapshot, penalty snapshot, and status. ERC721 provides a unique token ID and standard ownership semantics. Withdrawal and renewal authorization follows `ownerOf(depositId)`, so rights follow the current certificate owner.
+---
 
-### 3. Why are APR and penalty snapshotted?
+## C1 Principal Safety
 
-Plan terms may change after a deposit opens. Snapshotting prevents retroactive changes from modifying an existing customer's agreement. Automatic renewal preserves the old certificate's snapshots, while manual renewal intentionally snapshots the selected new plan's current terms.
+- **Problem**: Vault liquidity shortages must never lock user principal.
+- **Implementation**: `withdrawAtMaturity` transfers principal from `SavingCore` before attempting interest payment. If `vaultManager.payInterest` fails, the exception is caught, principal transfer succeeds, and unpaid interest is deferred to `pendingInterest[user]`.
+- **Claiming**: Deferred interest can be claimed later by calling `claimPendingInterest()` once `VaultManager` is funded.
 
-### 4. How is user principal protected from vault insolvency?
+---
 
-Principal is held in `SavingCore`, not `VaultManager`. Mature withdrawal transfers principal before attempting interest payment. If the interest payment fails, C1 records `pendingInterest` instead of reverting the principal transfer.
+## C2 Solvency Guard
 
-### 5. How does the system prevent the owner from withdrawing promised interest?
+- **Problem**: Admin must not withdraw vault funds committed to active deposit interest.
+- **Implementation**: `VaultManager.totalPromisedInterest` accumulates expected interest when deposits open/renew, and decreases when interest is paid or cancelled (via early withdrawal).
+- **Enforcement**: Owner `withdrawVault(amount)` enforces `currentBalance - amount >= totalPromisedInterest`.
 
-C2 records every active deposit's expected interest in `totalPromisedInterest`. `withdrawVault` requires the remaining vault balance to be at least that amount. This makes promised interest a measurable on-chain liability.
+---
 
-### 6. How are early withdrawal, mature withdrawal, and renewal kept mutually exclusive?
+## Pause Policy
 
-Every action requires `DepositStatus.Active`. The selected action changes the old certificate status to `Withdrawn`, `ManualRenewed`, or `AutoRenewed`. Later attempts fail because the deposit is no longer active. Time checks separately enforce pre-maturity versus post-maturity actions.
+System operations query `vaultManager.paused()`:
 
-### 7. How do pause control, grace period, and ownership affect operations?
+| Caller | Operation | Implemented Paused Behavior |
+| --- | --- | --- |
+| **User** | `openDeposit`, `withdrawAtMaturity`, `earlyWithdraw`, `renewDeposit`, `claimPendingInterest` | Blocked (`SavingCore: system is paused`) |
+| **Bot** | `autoRenewDeposit` | Blocked (`SavingCore: system is paused`) |
+| **Admin** | `fundVault`, `withdrawVault`, `payInterest` | Blocked (`whenNotPaused`) |
+| **Admin** | `createPlan`, `updatePlan`, `enablePlan`, `disablePlan`, `setFeeReceiver`, `setSavingCore`, `pause`, `unpause` | Allowed |
 
-`VaultManager.paused()` currently blocks deposit opening, withdrawals, renewals, bot-triggered auto-renewal, interest payment, vault funding, and pending-interest claims. Manual actions require the caller to own the certificate. Auto-renewal resolves the current ERC721 owner and becomes eligible at `maturityAt + GRACE_PERIOD`.
+### Recommended Future Hardening
+Allowing owner `fundVault` while paused would enable emergency vault replenishment without resuming public user actions.
 
-> **Planned hardening:** allow the owner to add vault liquidity while paused, while keeping user actions, renewal, interest claims, and vault withdrawals blocked until `unpause()`.
+---
+
+## Security Protections and Limitations
+
+- **Reentrancy Protection**: OpenZeppelin `ReentrancyGuard` (`nonReentrant` modifier) applied to external financial entry points in `SavingCore.sol`.
+- **Safe ERC20 Transfers**: OpenZeppelin `SafeERC20` used for all USDC operations.
+- **Access Controls**: OpenZeppelin `Ownable` restricts administrative functions.
+- **Limitations**: Single-owner administration model; no timelocks or multisig governance.
 
 ---
 
 ## Technology Stack
 
-### Smart Contracts
-
-- Solidity `0.8.28`
-- OpenZeppelin Contracts
-- Hardhat `2.x`
-- ethers v6
-- TypeScript
-- Chai
-- `solidity-coverage`
-- TypeChain
-- Hardhat Contract Sizer
-
-### Frontend
-
-- React `18`
-- TypeScript
-- Vite
-- Tailwind CSS
-- ethers v6
-- React Router
-- lucide-react
-- MetaMask
+- **Smart Contracts**: Solidity `0.8.28`, Hardhat `2.25.0`, OpenZeppelin Contracts `5.1.0`, TypeChain `0.5.1`, ethers `v6.13.5`.
+- **Frontend**: React `18.3.1`, TypeScript `5.6.3`, Vite `5.4.10`, Tailwind CSS `4.3.3`, React Router `6.28.0`, Lucide React `1.25.0`.
 
 ---
 
@@ -509,6 +353,12 @@ Every action requires `DepositStatus.Active`. The selected action changes the ol
 │   └── VaultManager.test.ts
 ├── frontend/
 │   ├── src/
+│   │   ├── blockchain/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   └── utils/
 │   ├── .env.example
 │   └── package.json
 ├── docs/
@@ -524,439 +374,253 @@ Every action requires `DepositStatus.Active`. The selected action changes the ol
 
 ## Installation
 
-### Prerequisites
-
-- Node.js 18 or newer
-- npm 9 or newer
-- MetaMask browser extension
-- Git
-
-### Clone and Install Root Dependencies
-
+### 1. Clone Repository & Install Root Dependencies
 ```bash
 git clone https://github.com/nguyenlam-eiu/ac-blockchain-online-banking-system.git
 cd ac-blockchain-online-banking-system
 npm install
 ```
 
-### Install Frontend Dependencies
-
+### 2. Install Frontend Dependencies
 ```bash
 cd frontend
 npm install
 cd ..
 ```
 
-### Compile Contracts
+---
 
-```bash
-npm run compile
+## Environment Variables
+
+### Root `.env` (Optional)
+```env
+REPORT_GAS=1
+TESTNET_PRIVATE_KEY=
+MAINNET_PRIVATE_KEY=
+SEPOLIA_RPC_URL=
+```
+
+### Frontend `.env.local` (Generated by `npm run demo:setup`)
+```env
+VITE_CHAIN_ID=31337
+VITE_NETWORK_NAME=Hardhat Localhost
+VITE_MOCK_USDC_ADDRESS=0x...
+VITE_VAULT_MANAGER_ADDRESS=0x...
+VITE_SAVING_CORE_ADDRESS=0x...
 ```
 
 ---
 
-## Testing and Coverage
+## Compile, Test, and Frontend Build
 
-### Run All Contract Tests
-
+### Compile Smart Contracts
 ```bash
-npx hardhat test
+npm run compile
 ```
 
-or:
-
+### Run Unit Test Suite
 ```bash
 npm test
 ```
+- **Latest Passing Test Count**: `118 passing` (0 failing).
 
-### Run Coverage
-
+### Coverage
 ```bash
 npx hardhat coverage
 ```
+> A previous project progress run recorded coverage above 90% across all metrics, but the latest final audit did not complete a fresh coverage run. Run `npx hardhat coverage` to verify the current result.
 
-Generated reports:
-
-```text
-coverage/index.html
-coverage.json
-lcov.info
+### Build Frontend Application
+```bash
+cd frontend
+npm run build
+cd ..
 ```
-
-These artifacts are generated locally and are not committed.
-
-### Verified Coverage Benchmark
-
-The Day 6 coverage run recorded:
-
-| Contract | Statements | Branches | Functions | Lines |
-|---|---:|---:|---:|---:|
-| `MockUSDC.sol` | 100% | 100% | 100% | 100% |
-| `SavingCore.sol` | 100% | 95.12% | 100% | 100% |
-| `VaultManager.sol` | 100% | 90% | 100% | 100% |
-| **All files** | **100%** | **93.44%** | **100%** | **100%** |
-
-**Recorded coverage-run test result:** `65 passing`, `0 failing`. The current suite has since been expanded with renewal, ownership-transfer, exact-boundary, and transaction-ordering tests; run `npx hardhat test` for the current count.
-
-> The project exceeds the assignment's 90% coverage requirement across the aggregate statement, branch, function, and line metrics.
+- **Frontend Build Status**: Built successfully (0 errors).
 
 ---
 
 ## Local Demo
 
-The project includes an automated localhost workflow.
+Running the local demonstration requires three terminal windows:
 
-### Terminal 1 — Start Hardhat Node
-
-From the repository root:
-
+### Terminal 1: Local Hardhat Node
 ```bash
 npm run node:local
 ```
 
-Keep this terminal running.
-
-### Terminal 2 — Deploy and Prepare Demo State
-
+### Terminal 2: Setup Local Environment State
 ```bash
 npm run demo:setup
 ```
+Automatically deploys contracts, links permissions, mints test MockUSDC, funds `VaultManager`, creates saving plans, and generates `frontend/.env.local`.
 
-The setup script:
-
-- deploys all three contracts;
-- wires `SavingCore` into `VaultManager`;
-- mints 10,000 MockUSDC to Hardhat Account #0;
-- funds the vault with 100,000 MockUSDC;
-- creates a one-day demo plan;
-- verifies on-chain state;
-- generates `frontend/.env.local`.
-
-### Terminal 3 — Start Frontend
-
+### Terminal 3: Launch Frontend
 ```bash
 cd frontend
 npm run dev
 ```
+Navigate to `http://localhost:5173`.
 
-Open:
+---
 
-```text
-http://localhost:5173
+## Advancing Blockchain Time
+
+To test maturity and grace period transitions locally without waiting real-world days:
+
+**Windows PowerShell**:
+```powershell
+$env:ADVANCE_DAYS="2"
+npm run demo:advance
 ```
 
-### MetaMask Local Network
-
-| Field | Value |
-|---|---|
-| Network Name | Hardhat Localhost |
-| RPC URL | `http://127.0.0.1:8545` |
-| Chain ID | `31337` |
-| Currency Symbol | `ETH` |
-
-Import Hardhat Account #0 using the development-only private key printed by the node.
-
-> Never use Hardhat development private keys on a public network or with real assets.
-
-### Advance Local Blockchain Time
-
-Windows CMD:
-
-```bat
+**Windows CMD**:
+```cmd
 set ADVANCE_DAYS=2
 npm run demo:advance
 ```
 
-macOS/Linux:
-
+**macOS / Linux**:
 ```bash
 ADVANCE_DAYS=2 npm run demo:advance
 ```
 
-After advancing time, refresh **My Deposits**. The frontend reads the latest block timestamp rather than the computer's `Date.now()` value.
+---
 
-### Run the Local Auto-Renew Bot
+## Auto-Renew Bot
 
-For the one-day demo plan and three-day grace period, advance at least four days. Five days is convenient for demonstration:
-
-Windows PowerShell:
-
-```powershell
-$env:ADVANCE_DAYS="5"
-npm run demo:advance
-npm run bot:auto-renew
-```
-
-Windows CMD:
-
-```bat
-set ADVANCE_DAYS=5
-npm run demo:advance
-npm run bot:auto-renew
-```
-
-macOS/Linux:
+To run the automated background renewal bot on localhost:
 
 ```bash
-ADVANCE_DAYS=5 npm run demo:advance
 npm run bot:auto-renew
 ```
 
-The bot:
-
-1. reads `SavingCore` from `frontend/.env.local`;
-2. uses the latest block timestamp;
-3. scans every certificate from `1` to `nextDepositId - 1`;
-4. selects only `Active` certificates where `block.timestamp >= maturityAt + GRACE_PERIOD`;
-5. submits and waits for `autoRenewDeposit`;
-6. logs the old certificate as `AutoRenewed` and the new certificate as `Active`.
-
-Running the bot again is safe for already processed certificates because they are no longer `Active`.
-
-### Reset Local State
-
-Stop and restart the Hardhat node, then run:
-
-```bash
-npm run demo:setup
-```
-
-Restart Vite after `.env.local` is regenerated.
-
-See [docs/LOCAL_DEMO.md](docs/LOCAL_DEMO.md) for the complete walkthrough.
+The script runs a continuous `while (true)` loop, reads the `SavingCore` address from `frontend/.env.local`, scans deposit IDs 1 through `nextDepositId - 1` every five seconds for `Active` certificates where `block.timestamp >= maturityAt + GRACE_PERIOD`, submits `autoRenewDeposit` for each eligible certificate, waits for transaction confirmation, isolates individual failures, and stops when the operator presses Ctrl+C.
 
 ---
 
-## Frontend
+## Frontend Capabilities
 
-### Pages
-
-| Page | Purpose |
-|---|---|
-| Dashboard | Balance, principal, active deposits, pending interest, system status |
-| Savings Plans | Plan discovery and open-deposit form |
-| My Deposits | Deposit history, maturity information, withdrawal, renewal, and detail links |
-| Deposit Detail | Certificate ownership, complete deposit terms, lifecycle actions, manual renewal plan selection, and certificate transfer |
-| Administration | Owner-only plan, vault, pause, solvency, and fee-receiver controls |
-| Not Found | Fallback route |
-
-### Frontend Environment Variables
-
-The frontend supports environment-aware blockchain configuration:
-
-```env
-VITE_CHAIN_ID=
-VITE_NETWORK_NAME=
-VITE_MOCK_USDC_ADDRESS=
-VITE_VAULT_MANAGER_ADDRESS=
-VITE_SAVING_CORE_ADDRESS=
-```
-
-Use:
-
-```text
-frontend/.env.example
-```
-
-as the template.
-
-For local demo, `npm run demo:setup` generates:
-
-```text
-frontend/.env.local
-```
-
-Do not commit `.env.local`. Restart Vite whenever its values change.
-
-### Frontend Commands
-
-```bash
-cd frontend
-npm run dev
-npm run build
-npm run preview
-```
-
-### Frontend Transaction Rules
-
-- MockUSDC always uses 6 decimals.
-- Contract instances are created outside page components.
-- Approval is skipped when allowance is already sufficient.
-- Buttons are disabled while transactions are pending.
-- Localhost transactions do not show Sepolia Etherscan links.
-- Deposit maturity uses blockchain block time.
-- The penalty receiver address is stored on-chain in `VaultManager`.
-- The optional penalty-receiver display name is frontend metadata stored in browser `localStorage`; it is not a `SavingPlan` field and is not part of consensus state.
-
-### Frontend Completion Status
-
-| Area | Status |
-|---|---|
-| Wallet and network handling | Complete |
-| Plan discovery and open deposit | Complete |
-| Deposit history and detail | Complete |
-| Early and mature withdrawal | Complete |
-| Manual renewal | Complete |
-| Grace-period auto-renewal | Complete |
-| Pending-interest claim | Complete |
-| ERC721 certificate transfer | Complete |
-| Owner administration dashboard | Complete |
-| Vault and solvency controls | Complete |
-| Local demo automation | Complete |
+- **Dashboard**: Account overview, MockUSDC balance, active deposit summary, C1 pending interest indicator and claim button.
+- **Plans**: Interactive list of available term deposit plans with open-deposit form.
+- **My Deposits**: Certificate portfolio showing status badges, maturity timers, and quick exit actions.
+- **Deposit Detail**: Deep view for individual certificate NFTs with manual renewal plan selection and certificate NFT transfer inputs.
+- **Administration**: Owner dashboard for plan management, vault funding, surplus liquidity withdrawal, pause toggling, and fee receiver address updates.
 
 ---
 
 ## Sepolia Deployment
 
-The frontend can also run against Sepolia (`chain ID 11155111`).
-
-Current project deployment:
-
-| Contract | Sepolia Address |
-|---|---|
-| MockUSDC | `0x7EE15D3D07a923C2B661824B76E2398DC20F9728` |
-| VaultManager | `0x2407cCBB5639A41F8A16fda75024a887b90d6C8f` |
-| SavingCore | `0xf907D74280d7c2a52397A933CAbEADbFfeC4fc7F` |
-
-### Environment
-
-Create a root `.env` when deploying:
-
-```env
-SEPOLIA_RPC_URL=
-TESTNET_PRIVATE_KEY=
-```
-
-Never commit `.env` or private keys.
-
-### Deploy
+Contracts can be deployed to Sepolia testnet using:
 
 ```bash
 npm run deploy:sepolia
 ```
 
-Sepolia transactions require test ETH for gas.
+Required environment variables: `TESTNET_PRIVATE_KEY` and `SEPOLIA_RPC_URL`.
+
+> The Hardhat verification plugin (`@nomicfoundation/hardhat-verify`) is installed, but Sepolia contract verification is not currently configured with a valid API key in `hardhat.config.ts`. Verification must be configured separately before deployment.
+
+### Earlier Recorded Sepolia Deployment
+
+> These addresses record a previous Sepolia deployment. Compatibility with the current compiled contracts cannot be confirmed from local source alone.
+
+- `MockUSDC`: `0x7EE15D3D07a923C2B661824B76E2398DC20F9728`
+- `VaultManager`: `0x2407cCBB5639A41F8A16fda75024a887b90d6C8f`
+- `SavingCore`: `0xf907D74280d7c2a52397A933CAbEADbFfeC4fc7F`
 
 ---
 
+## Design Answers
 
-## Final Project Status
+### 1. Transferable Certificate
+- **Answer**: Each deposit position is represented by an ERC721 NFT in `SavingCore`. Certificate actions (`withdrawAtMaturity`, `earlyWithdraw`, `renewDeposit`) verify `ownerOf(depositId) == msg.sender`. When an NFT is transferred via standard ERC721 transfer, the new holder becomes the recognized owner and inherits all withdrawal and renewal rights.
 
-The planned implementation is complete and ready for mentor review and demonstration.
+### 2. Empty Vault
+- **Answer**: C1 Principal Safety guarantees that vault insolvency never traps customer principal. `withdrawAtMaturity` transfers principal from `SavingCore` first. When `vaultManager.payInterest` fails due to insufficient vault funds, the exception is caught, principal payout succeeds, and unpaid interest is credited to `pendingInterest[user]`, which can be claimed later via `claimPendingInterest()`.
 
-Completed deliverables include:
+### 3. Dead Bot
 
-- three-contract Solidity architecture;
-- a passing contract test suite including grace-boundary, transaction-ordering, ownership-transfer, accounting, C1, C2, event, and renewal coverage;
-- C1 principal safety with deferred-interest claims;
-- C2 promised-interest solvency protection;
-- local and Sepolia deployment workflows;
-- a complete React and MetaMask user interface;
-- deposit opening, ownership discovery, withdrawal, selected-plan manual renewal, bot-triggered auto-renewal, and certificate transfer;
-- owner administration for plans, liquidity, pause state, and fee receiver;
-- automated localhost setup, blockchain-time advancement, and auto-renew bot execution;
-- project architecture, design answers, setup instructions, and demo documentation.
+`autoRenewDeposit` is permissionless, so any address may call it after the grace deadline. If the keeper bot is offline, the deposit remains `Active` and the user's principal and promised interest are not lost.
 
-The only submission activity not represented as application code is recording or linking the final demonstration video.
+However, after the grace deadline `block.timestamp >= maturityAt + GRACE_PERIOD`, manual `withdrawAtMaturity` and manual `renewDeposit` are no longer available because their upper-bound check `block.timestamp <= maturityAt + GRACE_PERIOD` now fails. The lifecycle remains blocked until someone submits `autoRenewDeposit(depositId)`. This is a liveness risk rather than an immediate loss-of-funds risk.
 
----
+A production deployment should use multiple keeper instances or an automation service such as Chainlink Automation or Gelato.
 
-## Security and Scope Notes
+### 4. Rounding Dust
 
-- This project is an educational demonstration, not production banking software.
-- `MockUSDC.mint` is intentionally public for testing.
-- No real user identity, KYC, custody, or fiat integration exists.
-- The system has not undergone a professional security audit.
-- Localhost state disappears when the Hardhat node stops.
-- Public-network private keys and RPC credentials must remain outside Git.
-- The local bot is an off-chain transaction submitter; smart contracts do not execute automatically when time passes.
-- Pause policy currently blocks vault funding and is tracked as a post-demo hardening item.
-- Reentrancy protection reduces callback risk but does not replace professional review, monitoring, or production-grade operational controls.
+`_calculateInterest` uses:
 
----
+```
+(principal * aprBps * tenorSeconds) / (BPS_DENOMINATOR * SECONDS_PER_YEAR)
+```
 
-## Demo Video
+The multiply-before-divide order reduces precision loss. Solidity integer division truncates fractional MockUSDC base units toward zero.
 
-**Required duration:** 3–5 minutes.
+The fractional remainder is never stored or allocated as promised interest. It remains economically uncommitted within the vault balance. Because `expectedInterest`, `totalPromisedInterest`, and the eventual payment all use the same stored integer amount, rounding cannot cause the vault to over-promise interest.
 
-**Video link:** [ADD FRONTEND DEMO VIDEO LINK HERE](https://example.com)
+No dedicated rounding-specific test currently exists; the behavior is implicitly exercised by the existing interest equality assertions throughout the test suite.
 
-The video should demonstrate:
+### 5. Boundary Times
 
-1. starting the local node and setup;
-2. connecting MetaMask;
-3. viewing Dashboard and Plans;
-4. opening two deposits;
-5. advancing blockchain time;
-6. withdrawing one matured deposit;
-7. manually renewing another deposit into a selected enabled plan;
-8. opening another deposit, advancing beyond maturity plus grace, and running `npm run bot:auto-renew`;
-9. verifying the old certificate is `AutoRenewed` and the newly minted certificate is `Active`;
-10. refreshing the application and verifying final state.
+Time conditions in `SavingCore.sol` use exact EVM block timestamps:
 
-> Replace the placeholder link before submission.
+- **Pre-maturity** (`block.timestamp < maturityAt`): only `earlyWithdraw` is available.
+- **Grace period** (`block.timestamp >= maturityAt` and `block.timestamp <= maturityAt + GRACE_PERIOD`): `withdrawAtMaturity` and `renewDeposit` are available.
+- **At or after the grace deadline** (`block.timestamp >= maturityAt + GRACE_PERIOD`): `autoRenewDeposit` is available. The `>=` operator means auto-renew is valid at the exact grace deadline and at any time thereafter.
 
----
+At the exact grace deadline, manual actions and auto-renew both satisfy their time checks simultaneously. Only the first confirmed transaction succeeds; the second reverts with `"SavingCore: deposit not active"` because the status has already changed away from `Active`.
 
-## Documentation
+### 6. Disabled Plan with Active Deposits
 
-- [Local Demo Guide](docs/LOCAL_DEMO.md)
-- [Project Plan](docs/planning/plan.md)
-- [Day 6 Progress and Coverage](docs/progress/day6.md)
-- [Frontend README](frontend/README.md), when present
+Calling `disablePlan(planId)` sets `plan.enabled = false` and immediately blocks new `openDeposit` calls with `"SavingCore: plan is disabled"`. Existing active certificates are not terminated.
+
+- `earlyWithdraw` and `withdrawAtMaturity` proceed normally regardless of whether the original plan is disabled.
+- `renewDeposit` requires the **selected target plan** (`newPlanId`) to be enabled; it reverts with `"SavingCore: target plan is disabled"` if the chosen plan is disabled. This means a depositor cannot manually renew into a disabled plan, including their own original plan.
+- `autoRenewDeposit` does **not** check `plan.enabled`. It reads tenor, APR, and penalty directly from the old certificate's snapshot fields (`aprBpsAtOpen`, `earlyWithdrawPenaltyBpsAtOpen`, `maturityAt - startAt`) and proceeds regardless of whether the underlying plan has since been disabled.
+
+### 7. Attack Thinking
+- **Answer**: Financial entry points in `SavingCore` apply `nonReentrant` modifiers and update deposit status to `Withdrawn`, `ManualRenewed`, or `AutoRenewed` before transferring assets. Solvency Guard (C2) tracks `totalPromisedInterest` in `VaultManager` and blocks owner withdrawals if remaining vault balance falls below promised obligations.
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Root
-npm install
+# Clean and compile contracts
+npm run clean
 npm run compile
-npm test
-npx hardhat coverage
-npm run deploy:localhost
-npm run deploy:sepolia
 
-# Automated local demo
+# Run Hardhat test suite (118 tests)
+npm test
+
+# Launch local Hardhat node
 npm run node:local
+
+# Execute local demo setup
 npm run demo:setup
+
+# Advance local blockchain time
 npm run demo:advance
+
+# Launch auto-renew keeper bot
 npm run bot:auto-renew
 
-# Frontend
-cd frontend
-npm install
-npm run dev
-npm run build
-npm run preview
+# Build frontend application
+cd frontend && npm run build
 ```
+
+---
+
+## Final Verification Status
+
+- **Smart Contract Compiler**: Solidity 0.8.28 (evm target: paris) — 0 errors.
+- **Contract Test Suite**: `118 passing` (0 failing).
+- **Frontend Build**: Vite production build complete — 0 errors.
+- **Coverage**: Not freshly reverified in the latest audit run. A previous progress-log benchmark recorded >90% across all metrics. Run `npx hardhat coverage` to obtain a current result.
 
 ---
 
 ## License
 
-This repository currently uses the `ISC` package license declaration.
-
----
-
-## Submission Checklist
-
-```text
-Smart contracts: Completed
-Contract tests: Passing
-Aggregate recorded coverage: Above 90%
-Grace-boundary and transaction-ordering tests: Passing
-NFT ownership-transfer tests: Passing
-Frontend ABI and call sites: Verified
-React frontend build: Passing
-Hardhat Localhost setup: Completed
-Auto-renew bot: Completed
-Mature withdrawal demo: Passed
-Manual selected-plan renewal demo: Passed
-Automatic renewal old/new certificate demo: Passed
-Pending-interest claim UI: Completed
-Owner administration frontend: Completed
-Pause-policy hardening: Backlog
-Video link: Pending
-```
+This project is licensed under the [ISC License](LICENSE).
