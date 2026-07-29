@@ -621,6 +621,19 @@ cd frontend && npm run build
 
 ---
 
+## Demo Video
+
+A complete 3–5 minute demonstration of the Online Banking System is available on YouTube:
+
+[![Online Banking System Demo](https://img.youtube.com/vi/JOXczbDoqMc/maxresdefault.jpg)](https://www.youtube.com/watch?v=JOXczbDoqMc)
+
+**Watch on YouTube:**
+https://www.youtube.com/watch?v=JOXczbDoqMc
+
+The demonstration covers: 4 core use cases
+
+---
+
 ## License
 
 This project is licensed under the [ISC License](LICENSE).
