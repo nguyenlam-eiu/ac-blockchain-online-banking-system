@@ -41,7 +41,7 @@ event DepositRenewed(
   4. New principal becomes `old principal + old expectedInterest`.
   5. A new deposit certificate is created with the same `planId`, original `aprBpsAtOpen`, and original `earlyWithdrawPenaltyBpsAtOpen`.
   6. New expected interest is calculated using the preserved APR:
-     `newExpectedInterest = (newPrincipal * aprBpsAtOpen * tenorSeconds) / (365 * 86400 * 10000)`.
+     `newExpectedInterest = _calculateInterest(newPrincipal, aprBpsAtOpen, tenorSeconds) = (newPrincipal * aprBpsAtOpen * tenorSeconds) / (BPS_DENOMINATOR * SECONDS_PER_YEAR)`.
   7. Calls `vaultManager.allocateInterest(newExpectedInterest)` for C2 bookkeeping.
   8. Mints a new ERC721 deposit NFT to the caller.
   9. Emits `DepositRenewed`.

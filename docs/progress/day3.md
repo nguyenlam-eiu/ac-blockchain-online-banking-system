@@ -55,7 +55,7 @@ enum DepositStatus { Active, Withdrawn, ManualRenewed, AutoRenewed }
   1. Checks `vaultManager.paused() == false`.
   2. Validates plan exists, is enabled, and amount is within min/max bounds.
   3. Pulls USDC from user → SavingCore via `safeTransferFrom`.
-  4. Calculates `expectedInterest = (amount * aprBps * tenorSeconds) / (365 * 86400 * 10000)` — multiply-before-divide pattern.
+  4. Calculates `expectedInterest` via `_calculateInterest(amount, aprBps, tenorSeconds) = (amount * aprBps * tenorSeconds) / (BPS_DENOMINATOR * SECONDS_PER_YEAR)` — multiply-before-divide pattern.
   5. Creates `DepositCertificate` with snapshotted APR and penalty.
   6. Calls `vaultManager.allocateInterest(expectedInterest)` — **C2 bookkeeping**.
   7. Mints ERC721 NFT to user (token ID = `nextDepositId`).
