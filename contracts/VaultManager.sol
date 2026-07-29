@@ -67,12 +67,12 @@ contract VaultManager is Ownable, Pausable {
         emit SystemUnpaused(msg.sender, block.timestamp);
     }
 
-    function fundVault(uint256 amount) external onlyOwner whenNotPaused {
+    function fundVault(uint256 amount) external onlyOwner {
         usdcToken.safeTransferFrom(msg.sender, address(this), amount);
         emit VaultFunded(msg.sender, amount, block.timestamp);
     }
 
-    function withdrawVault(uint256 amount) external onlyOwner {
+    function withdrawVault(uint256 amount) external onlyOwner whenNotPaused{
         uint256 currentBalance = usdcToken.balanceOf(address(this));
         require(currentBalance >= amount, "VaultManager: insufficient balance");
         require(
