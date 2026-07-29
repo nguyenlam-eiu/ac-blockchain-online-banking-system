@@ -1,6 +1,23 @@
-# Local Hardhat Demo Environment Guide (Phase 9)
+# Local Hardhat Demo Environment Guide
 
 This document provides a step-by-step guide to running the local Hardhat demo environment for the Online Banking System.
+
+---
+
+## Architecture & Contract Overview
+
+The Online Banking System smart contract suite consists of 3 core Solidity 0.8.28 contracts:
+
+1. **`MockUSDC.sol`**: ERC20 token with fixed 6 decimals (`decimals() returns 6`) and public minting for local/testnet environments.
+2. **`VaultManager.sol`**: Holds the bank interest pool and fee receiver address. Manages total promised interest tracking (`totalPromisedInterest`) and enforces the Solvency Guard (C2) to prevent unauthorized admin withdrawals of promised user interest.
+3. **`SavingCore.sol`**: ERC721 contract holding user principal and issuing Deposit Certificates. Handles deposit opening, maturity withdrawals, early withdrawals (with penalty), manual renewals, auto-renewals, and deferred interest tracking (C1 Principal Safety).
+
+### Mathematical Invariants & Formulas
+- **BPS Denominator**: `10_000` (100 BPS = 1%)
+- **Tenor Seconds**: `tenorDays * 1 days` (`SECONDS_PER_DAY = 1 days`)
+- **Interest Calculation**:
+  $$\text{expectedInterest} = \frac{\text{principal} \times \text{aprBps} \times \text{tenorSeconds}}{\text{BPS\_DENOMINATOR} \times \text{SECONDS\_PER\_YEAR}}$$
+  *(where `BPS_DENOMINATOR = 10_000` and `SECONDS_PER_YEAR = 365 days`). Multiplication is performed before division to prevent precision loss. All amounts remain in 6-decimal smallest units.*
 
 ---
 
@@ -33,7 +50,7 @@ This single command automatically:
 2. Links contract permissions (`VaultManager.setSavingCore`).
 3. Mints 10,000 MockUSDC to the demo account (`Account #0`).
 4. Funds the `VaultManager` interest pool with 100,000 MockUSDC.
-5. Creates Demo Saving Plan #1 (1-day tenor, 2.25% APR, 1 USDC min, 1,000,000 USDC max, 4% penalty).
+5. Creates Demo Saving Plan #1 (Student ID `2231200021` config: 1-day tenor, 2.25% APR, 1 USDC min, 1,000,000 USDC max, 4% penalty).
 6. Performs on-chain state verification.
 7. Automatically generates `frontend/.env.local` with the newly deployed contract addresses.
 
@@ -108,6 +125,15 @@ This advances the local EVM time by 2 days (172,800 seconds) and mines a block.
 3. Confirm transaction in MetaMask.
 4. Observe that Deposit #2 updates to `Renewed`, and a new active deposit certificate is created with compound principal + interest.
 
+### Scenario E: Auto-Renew Bot Execution
+To test automated background renewal for deposits where the grace period (3 days) has expired:
+
+Open Terminal 2 and run:
+```bash
+npm run bot:auto-renew
+```
+This triggers the auto-renew bot to scan and automatically renew expired certificates into new certificates assigned to the current NFT owner.
+
 ---
 
 ## Resetting the Demo Environment
@@ -130,5 +156,3 @@ Because restarting the local node resets transaction nonces back to `0`, MetaMas
 1. Go to **Settings** > **Advanced**.
 2. Click **Clear activity and nonce data**.
 3. Confirm. Refresh the frontend page.
-
-npm run bot:auto-renew
