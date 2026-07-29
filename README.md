@@ -78,7 +78,7 @@ The React frontend allows a MetaMask user to:
 - claim deferred interest after the vault is replenished;
 - open a dedicated deposit-certificate detail page;
 - transfer an ERC721 deposit certificate to another wallet;
-- manually renew or trigger grace-period auto-renewal;
+- manually renew into a selected enabled plan and observe bot-triggered auto-renewal after the grace deadline;
 - run the complete workflow on Sepolia or Hardhat Localhost.
 
 The owner administration interface additionally supports plan management, vault funding and excess withdrawal, pause controls, fee-receiver configuration, and solvency monitoring.
@@ -102,7 +102,7 @@ The owner administration interface additionally supports plan management, vault 
 - Pending-interest balance and claim flow
 - Dedicated deposit-certificate detail page
 - Certificate transfer between wallets
-- Manual and grace-period automatic renewal
+- Manual renewal with plan selection and bot-triggered automatic renewal
 - Blockchain-time-based maturity detection
 - Readable transaction and contract errors
 - Responsive banking dashboard UI
@@ -129,9 +129,11 @@ The owner administration interface additionally supports plan management, vault 
 - Pause and unpause controls
 - C1 deferred-interest recovery
 - C2 solvency guard
-- Manual renewal
-- Bot-triggered auto-renewal within a grace period
+- Manual renewal into a selected enabled plan
+- Bot-triggered auto-renewal at or after the grace deadline
+- Historical certificate status transitions with a newly minted active certificate
 - Promised-interest accounting
+- Reentrancy protection on external financial entry points
 
 ---
 
@@ -261,7 +263,8 @@ Responsibilities:
 - process early and mature withdrawals;
 - defer unpaid interest;
 - support pending-interest claims;
-- support manual and automatic renewal.
+- support manual renewal into a selected plan and permissionless bot-triggered automatic renewal;
+- protect external financial entry points with `ReentrancyGuard`.
 
 ### Deposit Statuses
 
@@ -323,18 +326,28 @@ At or after maturity:
 
 ### Manual Renewal
 
-At or after maturity:
+From maturity through the grace deadline, inclusive:
 
+- only the current ERC721 owner may call `renewDeposit(depositId, newPlanId)`;
+- `newPlanId` must exist and remain enabled;
 - the old certificate becomes `ManualRenewed`;
 - matured interest is paid from `VaultManager` to `SavingCore`;
-- new principal becomes `old principal + interest`;
-- a new active certificate is minted;
-- original APR and penalty snapshots are preserved;
-- a new interest obligation is allocated.
+- new principal becomes `old principal + matured interest`;
+- a new active certificate is minted to the current owner;
+- the new certificate snapshots the selected plan's current tenor, APR, and early-withdrawal penalty;
+- the old promised-interest obligation is replaced by the new certificate's obligation.
 
 ### Automatic Renewal
 
-`autoRenewDeposit` may be triggered for a matured active deposit only within the configured three-day grace period. The new certificate is minted to the current ERC721 owner.
+At or after `maturityAt + GRACE_PERIOD`, any caller may trigger `autoRenewDeposit(depositId)` for an active matured certificate. A local bot scans eligible certificates and submits the transaction.
+
+- the old certificate becomes `AutoRenewed`;
+- a new active certificate is minted to the current ERC721 owner;
+- the renewed principal is `old principal + matured interest`;
+- the new certificate preserves the old certificate's plan ID, tenor, APR snapshot, and penalty snapshot;
+- the old certificate remains on-chain as lifecycle history.
+
+At the exact grace deadline, manual actions and auto-renewal are both initially eligible. Only the first confirmed transaction succeeds because it changes the old certificate away from `Active`.
 
 ---
 
@@ -428,7 +441,7 @@ A deposit is a unique financial position with its own principal, plan, opening t
 
 ### 3. Why are APR and penalty snapshotted?
 
-Plan terms may change after a deposit opens. Snapshotting prevents retroactive changes from modifying an existing customer's agreement. Renewals also preserve the original snapshots, protecting the renewed position from later plan-rate changes.
+Plan terms may change after a deposit opens. Snapshotting prevents retroactive changes from modifying an existing customer's agreement. Automatic renewal preserves the old certificate's snapshots, while manual renewal intentionally snapshots the selected new plan's current terms.
 
 ### 4. How is user principal protected from vault insolvency?
 
@@ -444,7 +457,9 @@ Every action requires `DepositStatus.Active`. The selected action changes the ol
 
 ### 7. How do pause control, grace period, and ownership affect operations?
 
-`VaultManager.paused()` blocks deposit opening, withdrawals, renewals, funding, interest payment, and pending-interest claims where required. Manual actions require the caller to own the certificate. Auto-renewal resolves the current ERC721 owner and is limited to `maturityAt + GRACE_PERIOD`.
+`VaultManager.paused()` currently blocks deposit opening, withdrawals, renewals, bot-triggered auto-renewal, interest payment, vault funding, and pending-interest claims. Manual actions require the caller to own the certificate. Auto-renewal resolves the current ERC721 owner and becomes eligible at `maturityAt + GRACE_PERIOD`.
+
+> **Planned hardening:** allow the owner to add vault liquidity while paused, while keeping user actions, renewal, interest claims, and vault withdrawals blocked until `unpause()`.
 
 ---
 
@@ -486,7 +501,8 @@ Every action requires `DepositStatus.Active`. The selected action changes the ol
 ├── scripts/
 │   ├── deploy.ts
 │   ├── setup-local-demo.ts
-│   └── advance-local-time.ts
+│   ├── advance-local-time.ts
+│   └── auto-renew-bot.ts
 ├── test/
 │   ├── MockUSDC.test.ts
 │   ├── SavingCore.test.ts
@@ -580,7 +596,7 @@ The Day 6 coverage run recorded:
 | `VaultManager.sol` | 100% | 90% | 100% | 100% |
 | **All files** | **100%** | **93.44%** | **100%** | **100%** |
 
-**Test result:** `65 passing`, `0 failing`.
+**Recorded coverage-run test result:** `65 passing`, `0 failing`. The current suite has since been expanded with renewal, ownership-transfer, exact-boundary, and transaction-ordering tests; run `npx hardhat test` for the current count.
 
 > The project exceeds the assignment's 90% coverage requirement across the aggregate statement, branch, function, and line metrics.
 
@@ -659,6 +675,44 @@ ADVANCE_DAYS=2 npm run demo:advance
 
 After advancing time, refresh **My Deposits**. The frontend reads the latest block timestamp rather than the computer's `Date.now()` value.
 
+### Run the Local Auto-Renew Bot
+
+For the one-day demo plan and three-day grace period, advance at least four days. Five days is convenient for demonstration:
+
+Windows PowerShell:
+
+```powershell
+$env:ADVANCE_DAYS="5"
+npm run demo:advance
+npm run bot:auto-renew
+```
+
+Windows CMD:
+
+```bat
+set ADVANCE_DAYS=5
+npm run demo:advance
+npm run bot:auto-renew
+```
+
+macOS/Linux:
+
+```bash
+ADVANCE_DAYS=5 npm run demo:advance
+npm run bot:auto-renew
+```
+
+The bot:
+
+1. reads `SavingCore` from `frontend/.env.local`;
+2. uses the latest block timestamp;
+3. scans every certificate from `1` to `nextDepositId - 1`;
+4. selects only `Active` certificates where `block.timestamp >= maturityAt + GRACE_PERIOD`;
+5. submits and waits for `autoRenewDeposit`;
+6. logs the old certificate as `AutoRenewed` and the new certificate as `Active`.
+
+Running the bot again is safe for already processed certificates because they are no longer `Active`.
+
 ### Reset Local State
 
 Stop and restart the Hardhat node, then run:
@@ -682,7 +736,7 @@ See [docs/LOCAL_DEMO.md](docs/LOCAL_DEMO.md) for the complete walkthrough.
 | Dashboard | Balance, principal, active deposits, pending interest, system status |
 | Savings Plans | Plan discovery and open-deposit form |
 | My Deposits | Deposit history, maturity information, withdrawal, renewal, and detail links |
-| Deposit Detail | Certificate ownership, complete deposit terms, lifecycle actions, auto-renewal, and certificate transfer |
+| Deposit Detail | Certificate ownership, complete deposit terms, lifecycle actions, manual renewal plan selection, and certificate transfer |
 | Administration | Owner-only plan, vault, pause, solvency, and fee-receiver controls |
 | Not Found | Fallback route |
 
@@ -793,14 +847,14 @@ The planned implementation is complete and ready for mentor review and demonstra
 Completed deliverables include:
 
 - three-contract Solidity architecture;
-- 65 passing contract tests and the recorded coverage benchmark;
+- a passing contract test suite including grace-boundary, transaction-ordering, ownership-transfer, accounting, C1, C2, event, and renewal coverage;
 - C1 principal safety with deferred-interest claims;
 - C2 promised-interest solvency protection;
 - local and Sepolia deployment workflows;
 - a complete React and MetaMask user interface;
-- deposit opening, ownership discovery, withdrawal, renewal, auto-renewal, and certificate transfer;
+- deposit opening, ownership discovery, withdrawal, selected-plan manual renewal, bot-triggered auto-renewal, and certificate transfer;
 - owner administration for plans, liquidity, pause state, and fee receiver;
-- automated localhost setup and blockchain-time advancement;
+- automated localhost setup, blockchain-time advancement, and auto-renew bot execution;
 - project architecture, design answers, setup instructions, and demo documentation.
 
 The only submission activity not represented as application code is recording or linking the final demonstration video.
@@ -815,8 +869,9 @@ The only submission activity not represented as application code is recording or
 - The system has not undergone a professional security audit.
 - Localhost state disappears when the Hardhat node stops.
 - Public-network private keys and RPC credentials must remain outside Git.
-- The frontend pending-interest claim action is not currently implemented, although `SavingCore.claimPendingInterest()` exists and pending interest is displayed.
-- Optional admin controls are not part of the current frontend.
+- The local bot is an off-chain transaction submitter; smart contracts do not execute automatically when time passes.
+- Pause policy currently blocks vault funding and is tracked as a post-demo hardening item.
+- Reentrancy protection reduces callback risk but does not replace professional review, monitoring, or production-grade operational controls.
 
 ---
 
@@ -834,8 +889,10 @@ The video should demonstrate:
 4. opening two deposits;
 5. advancing blockchain time;
 6. withdrawing one matured deposit;
-7. renewing the second deposit;
-8. refreshing the application and verifying final state.
+7. manually renewing another deposit into a selected enabled plan;
+8. opening another deposit, advancing beyond maturity plus grace, and running `npm run bot:auto-renew`;
+9. verifying the old certificate is `AutoRenewed` and the newly minted certificate is `Active`;
+10. refreshing the application and verifying final state.
 
 > Replace the placeholder link before submission.
 
@@ -865,6 +922,7 @@ npm run deploy:sepolia
 npm run node:local
 npm run demo:setup
 npm run demo:advance
+npm run bot:auto-renew
 
 # Frontend
 cd frontend
@@ -882,18 +940,23 @@ This repository currently uses the `ISC` package license declaration.
 
 ---
 
-## Final Project Status
+## Submission Checklist
 
 ```text
 Smart contracts: Completed
-Contract tests: 65 passing
-Aggregate coverage: Above 90%
-Sepolia deployment support: Completed
-React frontend: Completed
-Hardhat Localhost automation: Completed
+Contract tests: Passing
+Aggregate recorded coverage: Above 90%
+Grace-boundary and transaction-ordering tests: Passing
+NFT ownership-transfer tests: Passing
+Frontend ABI and call sites: Verified
+React frontend build: Passing
+Hardhat Localhost setup: Completed
+Auto-renew bot: Completed
 Mature withdrawal demo: Passed
-Manual renewal demo: Passed
+Manual selected-plan renewal demo: Passed
+Automatic renewal old/new certificate demo: Passed
 Pending-interest claim UI: Completed
-Optional admin frontend: Completed
+Owner administration frontend: Completed
+Pause-policy hardening: Backlog
 Video link: Pending
 ```
