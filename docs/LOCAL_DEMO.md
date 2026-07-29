@@ -130,3 +130,5 @@ Because restarting the local node resets transaction nonces back to `0`, MetaMas
 1. Go to **Settings** > **Advanced**.
 2. Click **Clear activity and nonce data**.
 3. Confirm. Refresh the frontend page.
+
+npm run bot:auto-renew
